@@ -68,7 +68,7 @@ RUN git clone --branch 0.9.2 --depth 1 --recurse-submodules https://github.com/f
     touch /workspace/libfranka/COLCON_IGNORE
 
 # Copy workspace source files (respecting .dockerignore)
-COPY . /workspace/src/LF205_ROS_Panda
+COPY . /workspace/src/teleop_panda
 
 # Build ROS 2 workspace — scan all package trees under src/
 # Skip franka_debug_tools (standalone debug utils, not needed for runtime)

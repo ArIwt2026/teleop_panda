@@ -1,5 +1,5 @@
 services:
-  panda_workspace:
+  teleop_panda:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
