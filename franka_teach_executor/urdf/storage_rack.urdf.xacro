@@ -1,0 +1,189 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="storage_rack">
+  <!-- Local frame is the midpoint between the two profile centers. -->
+  <xacro:property name="profile_size" value="0.045"/>
+  <xacro:property name="profile_length" value="0.888"/>
+  <!-- Measured clear distance between the inside faces of the uprights. -->
+  <xacro:property name="profile_clear_gap" value="0.440"/>
+  <xacro:property name="profile_spacing" value="${profile_clear_gap + profile_size}"/>
+  <xacro:property name="outward_extension" value="0.100"/>
+  <xacro:property name="outward_extension_center_y" value="${profile_size / 2 + outward_extension / 2}"/>
+  <xacro:property name="crossbar_height" value="0.395"/>
+  <!-- Vertical gap from the first board top to the next profile bottom. -->
+  <!-- Shelf 2 top is exactly 220 mm above shelf 1 top. -->
+  <xacro:property name="next_level_board_height" value="${crossbar_height + profile_size / 2 + board_height / 2 + 0.220}"/>
+  <xacro:property name="next_level_profile_height" value="${next_level_board_height - board_height / 2 - profile_size / 2}"/>
+  <!-- Shelf 3 top is exactly 205 mm above shelf 2 top. -->
+  <xacro:property name="level3_board_height" value="${next_level_board_height + 0.205}"/>
+  <xacro:property name="level3_profile_height" value="${level3_board_height - board_height / 2 - profile_size / 2}"/>
+  <!-- Board is 10 mm high/thick and 100 mm deep (breadth). -->
+  <xacro:property name="board_height" value="0.010"/>
+  <xacro:property name="board_breadth" value="0.100"/>
+  <!-- Spans the clear gap plus one 45 mm profile on each side. -->
+  <xacro:property name="board_length" value="${profile_clear_gap + 2 * profile_size}"/>
+
+  <!-- Placement matching the existing PLC display rectangle. The frame base
+       is aligned with the display bottom (1.335 - 0.75/2 = 0.96 m). -->
+  <xacro:property name="placement_x" value="-0.09"/>
+  <xacro:property name="placement_y" value="-0.637"/>
+  <xacro:property name="placement_z" value="1.0065"/>
+  <xacro:property name="placement_yaw" value="0.0"/>
+
+  <material name="aluminum">
+    <color rgba="0.65 0.68 0.72 1.0"/>
+  </material>
+
+  <link name="storage_rack_origin"/>
+
+  <joint name="storage_rack_world_joint" type="fixed">
+    <parent link="world"/>
+    <child link="storage_rack_origin"/>
+    <origin xyz="${placement_x} ${placement_y} ${placement_z}" rpy="0 0 ${placement_yaw}"/>
+  </joint>
+
+  <link name="left_vertical_profile">
+    <visual>
+      <origin xyz="0 0 ${profile_length / 2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${profile_size} ${profile_size} ${profile_length}"/>
+      </geometry>
+      <material name="aluminum"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${profile_length / 2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${profile_size} ${profile_size} ${profile_length}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="right_vertical_profile">
+    <visual>
+      <origin xyz="0 0 ${profile_length / 2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${profile_size} ${profile_size} ${profile_length}"/>
+      </geometry>
+      <material name="aluminum"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${profile_length / 2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${profile_size} ${profile_size} ${profile_length}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="left_outward_profile">
+    <visual><origin xyz="0 0 0"/><geometry><box size="${profile_size} ${outward_extension} ${profile_size}"/></geometry><material name="aluminum"/></visual>
+    <collision><origin xyz="0 0 0"/><geometry><box size="${profile_size} ${outward_extension} ${profile_size}"/></geometry></collision>
+  </link>
+
+  <link name="right_outward_profile">
+    <visual><origin xyz="0 0 0"/><geometry><box size="${profile_size} ${outward_extension} ${profile_size}"/></geometry><material name="aluminum"/></visual>
+    <collision><origin xyz="0 0 0"/><geometry><box size="${profile_size} ${outward_extension} ${profile_size}"/></geometry></collision>
+  </link>
+
+  <link name="wooden_board">
+    <visual><origin xyz="0 0 0"/><geometry><box size="${board_length} ${board_breadth} ${board_height}"/></geometry><material name="wood"/></visual>
+    <collision><origin xyz="0 0 0"/><geometry><box size="${board_length} ${board_breadth} ${board_height}"/></geometry></collision>
+  </link>
+
+  <link name="left_outward_profile_level2">
+    <visual><origin xyz="0 0 0"/><geometry><box size="${profile_size} ${outward_extension} ${profile_size}"/></geometry><material name="aluminum"/></visual>
+    <collision><origin xyz="0 0 0"/><geometry><box size="${profile_size} ${outward_extension} ${profile_size}"/></geometry></collision>
+  </link>
+
+  <link name="right_outward_profile_level2">
+    <visual><origin xyz="0 0 0"/><geometry><box size="${profile_size} ${outward_extension} ${profile_size}"/></geometry><material name="aluminum"/></visual>
+    <collision><origin xyz="0 0 0"/><geometry><box size="${profile_size} ${outward_extension} ${profile_size}"/></geometry></collision>
+  </link>
+
+  <link name="wooden_board_level2">
+    <visual><origin xyz="0 0 0"/><geometry><box size="${board_length} ${board_breadth} ${board_height}"/></geometry><material name="wood"/></visual>
+    <collision><origin xyz="0 0 0"/><geometry><box size="${board_length} ${board_breadth} ${board_height}"/></geometry></collision>
+  </link>
+
+  <link name="left_outward_profile_level3">
+    <visual><origin xyz="0 0 0"/><geometry><box size="${profile_size} ${outward_extension} ${profile_size}"/></geometry><material name="aluminum"/></visual>
+    <collision><origin xyz="0 0 0"/><geometry><box size="${profile_size} ${outward_extension} ${profile_size}"/></geometry></collision>
+  </link>
+
+  <link name="right_outward_profile_level3">
+    <visual><origin xyz="0 0 0"/><geometry><box size="${profile_size} ${outward_extension} ${profile_size}"/></geometry><material name="aluminum"/></visual>
+    <collision><origin xyz="0 0 0"/><geometry><box size="${profile_size} ${outward_extension} ${profile_size}"/></geometry></collision>
+  </link>
+
+  <link name="wooden_board_level3">
+    <visual><origin xyz="0 0 0"/><geometry><box size="${board_length} ${board_breadth} ${board_height}"/></geometry><material name="wood"/></visual>
+    <collision><origin xyz="0 0 0"/><geometry><box size="${board_length} ${board_breadth} ${board_height}"/></geometry></collision>
+  </link>
+
+  <material name="wood"><color rgba="0.55 0.30 0.12 1.0"/></material>
+
+  <joint name="left_profile_fixed" type="fixed">
+    <parent link="storage_rack_origin"/>
+    <child link="left_vertical_profile"/>
+    <origin xyz="-${profile_spacing / 2} 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="right_profile_fixed" type="fixed">
+    <parent link="storage_rack_origin"/>
+    <child link="right_vertical_profile"/>
+    <origin xyz="${profile_spacing / 2} 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="left_outward_profile_fixed" type="fixed">
+    <parent link="storage_rack_origin"/>
+    <child link="left_outward_profile"/>
+    <origin xyz="-${profile_spacing / 2} ${outward_extension_center_y} ${crossbar_height}" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="right_outward_profile_fixed" type="fixed">
+    <parent link="storage_rack_origin"/>
+    <child link="right_outward_profile"/>
+    <origin xyz="${profile_spacing / 2} ${outward_extension_center_y} ${crossbar_height}" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="wooden_board_fixed" type="fixed">
+    <parent link="storage_rack_origin"/>
+    <child link="wooden_board"/>
+    <!-- Rest on top of the 45 mm-high outward profiles. -->
+    <origin xyz="0 ${outward_extension_center_y} ${crossbar_height + profile_size / 2 + board_height / 2}" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="left_outward_profile_level2_fixed" type="fixed">
+    <parent link="storage_rack_origin"/>
+    <child link="left_outward_profile_level2"/>
+    <origin xyz="-${profile_spacing / 2} ${outward_extension_center_y} ${next_level_profile_height}" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="right_outward_profile_level2_fixed" type="fixed">
+    <parent link="storage_rack_origin"/>
+    <child link="right_outward_profile_level2"/>
+    <origin xyz="${profile_spacing / 2} ${outward_extension_center_y} ${next_level_profile_height}" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="wooden_board_level2_fixed" type="fixed">
+    <parent link="storage_rack_origin"/>
+    <child link="wooden_board_level2"/>
+    <origin xyz="0 ${outward_extension_center_y} ${next_level_board_height}" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="left_outward_profile_level3_fixed" type="fixed">
+    <parent link="storage_rack_origin"/>
+    <child link="left_outward_profile_level3"/>
+    <origin xyz="-${profile_spacing / 2} ${outward_extension_center_y} ${level3_profile_height}" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="right_outward_profile_level3_fixed" type="fixed">
+    <parent link="storage_rack_origin"/>
+    <child link="right_outward_profile_level3"/>
+    <origin xyz="${profile_spacing / 2} ${outward_extension_center_y} ${level3_profile_height}" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="wooden_board_level3_fixed" type="fixed">
+    <parent link="storage_rack_origin"/>
+    <child link="wooden_board_level3"/>
+    <origin xyz="0 ${outward_extension_center_y} ${level3_board_height}" rpy="0 0 0"/>
+  </joint>
+</robot>

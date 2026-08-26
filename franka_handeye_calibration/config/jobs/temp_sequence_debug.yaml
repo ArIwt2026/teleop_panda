@@ -1,0 +1,35 @@
+job_name: temp_sequence_debug
+sequence_name: pick_demo
+eye_in_hand: false
+capture_mode: mock
+image_topic: ""
+camera_info_topic: ""
+robot_state_topic: ""
+joint_state_topic: /franka/joint_states
+intrinsics_path: ""
+fk_service_name: /compute_fk
+fk_link_name: panda_hand_tcp
+robot_pose_source: fk
+robot_base_frame: panda_link0
+board:
+  squares_x: 7
+  squares_y: 10
+  square_length_m: 0.04
+  marker_length_m: 0.024
+  dictionary_name: DICT_6X6_250
+settle_time_sec: 0.2
+min_corners: 0
+required_min_samples: 1
+max_retries_per_point: 0
+skip_failed_points: false
+retry_backoff_sec: 0.1
+output_root: calibration_data/handeye
+executor_namespace: /franka_teach_executor
+reject_on_fk_mismatch: false
+max_fk_translation_error_m: 1.0
+max_fk_rotation_error_deg: 180.0
+freshness:
+  image_max_age_sec: 10.0
+  camera_info_max_age_sec: 10.0
+  robot_state_max_age_sec: 10.0
+  joint_state_max_age_sec: 2.0

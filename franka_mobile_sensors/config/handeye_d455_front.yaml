@@ -1,0 +1,8 @@
+name: "Hand-Eye D455 Front"
+description: "Single RealSense D455 configuration for Franka hand-eye calibration"
+
+cameras:
+  - name: "camera_front"
+    namespace: "camera_front"
+    serial_number: "035122250662"
+    device_profile: "franka_mobile_d455"

@@ -1,0 +1,25 @@
+# Point name stored in teach_data/points/<name>.yaml
+string point_name
+
+# If true, only validate and plan. Do not execute.
+bool plan_only
+
+# Optional per-goal overrides. Negative means "use executor default".
+float64 velocity_scale
+float64 acceleration_scale
+float64 planning_time
+float64 goal_tolerance
+string planner_id
+bool base_only
+string ref_point_name
+---
+bool success
+string final_state
+string point_name
+uint32 completed_steps
+uint32 failed_step_index
+string failed_point_name
+string error_message
+franka_teach_msgs/ExecutorStatus final_status
+---
+franka_teach_msgs/ExecutorStatus status

@@ -1,0 +1,12 @@
+build/
+install/
+log/
+.git/
+**/.git/
+teach_data/
+*.user
+*.pyc
+__pycache__/
+libfranka/
+external/snap7/
+

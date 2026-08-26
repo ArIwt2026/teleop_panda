@@ -1,0 +1,23 @@
+# Target pose expressed in the calibrated camera frame.
+geometry_msgs/PoseStamped target_pose
+
+# If true, only validate and plan. Do not execute.
+bool plan_only
+
+# Optional per-goal overrides. Negative means "use executor default".
+float64 velocity_scale
+float64 acceleration_scale
+float64 planning_time
+float64 goal_tolerance
+---
+bool success
+string final_state
+string target_frame
+uint32 completed_steps
+uint32 failed_step_index
+string failed_point_name
+string error_message
+franka_teach_msgs/ExecutorStatus final_status
+geometry_msgs/PoseStamped transformed_target_pose
+---
+franka_teach_msgs/ExecutorStatus status

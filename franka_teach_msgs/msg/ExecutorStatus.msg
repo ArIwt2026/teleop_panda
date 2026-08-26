@@ -1,0 +1,16 @@
+string executor_state
+string active_sequence_name
+string active_point_name
+uint32 active_step_index
+uint32 total_steps
+uint32 completed_steps
+uint32 failed_step_index
+string failed_point_name
+string last_error
+bool busy
+bool pause_requested
+bool waiting_for_continue
+bool fault_reflex
+bool fault_stopped
+bool recover_required
+bool stop_requested

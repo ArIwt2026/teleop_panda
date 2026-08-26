@@ -1,0 +1,16 @@
+# Simple front camera only configuration for AprilTag detection
+name: "Simple Front Camera"
+description: "Single camera (D455) for AprilTag picking"
+
+cameras: 
+  - name: "camera_front"
+    namespace: "camera_front" 
+    serial_number: "035122250662"  # Use serial number instead of USB port
+    device_profile: "franka_mobile_d455"
+    
+network:
+  host_ip: "172.16.16.50"
+  interface_ip: "0.0.0.0"
+  host_udp_port: 0
+
+lidars: []

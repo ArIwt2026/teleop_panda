@@ -1,0 +1,48 @@
+<?xml version='1.0' encoding='utf-8'?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="panda">
+  <xacro:arg name="arm_id" default="panda"/> <!-- Name of this panda -->
+  <xacro:arg name="hand" default="false"/> <!-- Should a franka_gripper be mounted at the flange?" -->
+  <xacro:arg name="robot_ip" default=""/> <!-- IP address or hostname of the robot" -->
+  <xacro:arg name="use_fake_hardware" default="false"/>
+  <xacro:arg name="fake_sensor_commands" default="false"/>
+  <xacro:arg name="prefix" default="panda" />
+
+  <xacro:include filename="$(find franka_description)/robots/panda_arm.xacro"/>
+    <!-- Added offsets to better fit the panda in the world -->
+
+  <xacro:panda_arm arm_id="$(arg arm_id)" connected_to="$(arg prefix)_table_base" xyz="0.045 -0.003 -0.005" rpy="0 0 0" safety_distance="0.03"/>
+
+  <xacro:if value="$(arg hand)">
+    <xacro:include filename="$(find franka_description)/robots/hand.xacro"/>
+    <xacro:hand ns="$(arg arm_id)" rpy="0 0 ${-pi/4}" connected_to="$(arg arm_id)_link8" safety_distance="0.03"/>
+  </xacro:if>
+  <xacro:include filename="$(find franka_description)/robots/panda_arm.ros2_control.xacro"/>
+  <xacro:panda_arm_ros2_control ns="$(arg arm_id)" robot_ip="$(arg robot_ip)" use_fake_hardware="$(arg use_fake_hardware)" fake_sensor_commands="$(arg fake_sensor_commands)"/>
+
+  <!-- Import Robot Base Station -->
+  <xacro:include filename="$(find franka_description)/environment/base_table.xacro"/>
+  <!-- Import Conveyor Belt System -->
+  <xacro:include filename="$(find franka_description)/environment/conveyor.xacro"/>
+  <!-- Import Recycle Bin -->
+  <xacro:include filename="$(find franka_description)/environment/recycle_bin.xacro"/>
+  <!-- Import the new two-profile storage rack -->
+  <xacro:include filename="$(find franka_teach_executor)/urdf/storage_rack.urdf.xacro"/>
+
+  <link name="world" />
+
+  <!-- World to table -->
+  <xacro:add_table table_link="$(arg prefix)_table_base" parent="world">
+      <origin xyz="0 0 1" rpy="0 0 0" />
+  </xacro:add_table>
+
+  <!-- World to Conveyor Belt -->
+  <xacro:conveyor_system parent="world">
+      <origin xyz="-1 -5.5 1" rpy="0 0 1.57" />
+  </xacro:conveyor_system>
+
+  <!-- World to Recycle Bin (on table) -->
+  <xacro:recycle_bin parent="$(arg prefix)_table_base">
+      <origin xyz="-0.23 0.23 0.0" rpy="1.5708 0 3.14159" />
+  </xacro:recycle_bin>
+
+</robot>

@@ -1,0 +1,28 @@
+# Named job stored in config/jobs/<job_name>.yaml
+string job_name
+
+# Optional explicit job config path. Overrides job_name lookup when provided.
+string job_config_path
+
+# If true, collect samples and solve the hand-eye calibration.
+# If false, collect samples only.
+bool solve_after_collection
+---
+bool success
+string job_name
+string final_state
+string run_directory
+uint32 attempted_samples
+uint32 valid_samples
+string chosen_method
+string transform_file
+string error_message
+---
+string state
+string active_point_name
+uint32 active_step_index
+uint32 total_steps
+uint32 attempted_samples
+uint32 valid_samples
+uint32 retry_count
+string last_message

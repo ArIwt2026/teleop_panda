@@ -1,0 +1,22 @@
+# Sequence name stored in teach_data/sequences/<name>.yaml
+string sequence_name
+
+# If true, only validate and plan. Do not execute.
+bool plan_only
+
+# 1-based step index to start from. 0 means use step 1.
+uint32 start_step_index
+
+# If true, hold after every completed step until continue is requested.
+bool force_wait_each_step
+---
+bool success
+string final_state
+string sequence_name
+uint32 completed_steps
+uint32 failed_step_index
+string failed_point_name
+string error_message
+franka_teach_msgs/ExecutorStatus final_status
+---
+franka_teach_msgs/ExecutorStatus status

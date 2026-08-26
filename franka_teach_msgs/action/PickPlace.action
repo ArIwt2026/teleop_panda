@@ -1,0 +1,43 @@
+# Point name stored in teach_data/points/<name>.yaml
+string point_name
+
+# Mode: "pick" (approach -> descend -> grasp -> retract)
+#       "place" (approach -> descend -> open -> retract)
+string mode
+
+# Optional approach/retract height. Negative means use executor default.
+float64 approach_height
+
+# Optional lift-off height (vertical in global Z). Negative means no lift-off.
+# PICK: After grasp, lifts straight up before retracting along tool axis
+# PLACE: Approaches with extra height, descends to target+lift_off, then final descent
+float64 lift_off_height
+
+# Gripper parameters. Negative means use defaults (Force=50N, Speed=0.1, Width=0/max)
+float64 gripper_width
+float64 gripper_force
+float64 gripper_speed
+
+# Optional force to use when descending to place an object. 0.0 or negative means do not loosen grip.
+float64 place_descent_force
+
+# If true, only validate and plan. Do not execute.
+bool plan_only
+
+# Optional per-goal overrides. Negative means "use executor default".
+float64 velocity_scale
+float64 acceleration_scale
+float64 planning_time
+float64 goal_tolerance
+string planner_id
+---
+bool success
+string final_state
+string point_name
+uint32 completed_steps
+uint32 failed_step_index
+string failed_point_name
+string error_message
+franka_teach_msgs/ExecutorStatus final_status
+---
+franka_teach_msgs/ExecutorStatus status

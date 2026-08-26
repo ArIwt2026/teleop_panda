@@ -1,0 +1,41 @@
+# Name of the taught relative point to execute
+string point_name
+
+# Current detected pose of the marker (e.g. from AprilTag detection)
+geometry_msgs/PoseStamped marker_pose
+
+# Mode: "move" (default, just go to point)
+#       "pick" (approach -> descend -> grasp -> retract)
+#       "place" (approach -> descend -> open -> retract)
+string mode
+
+# Macro parameters
+float64 approach_height
+float64 gripper_width
+float64 gripper_force
+float64 gripper_speed
+
+# MoveIt parameters (overrides). Negative means "use executor default".
+float64 velocity_scale
+float64 acceleration_scale
+float64 planning_time
+float64 goal_tolerance
+
+# If true, only plan and return the result without executing
+bool plan_only
+
+# If true, use marker_pose as a locked snapshot and do not first move to observation_pose.
+bool skip_observation_pose
+string planner_id
+string planning_pipeline_id
+---
+bool success
+string final_state
+string point_name
+uint32 completed_steps
+uint32 failed_step_index
+string failed_point_name
+string error_message
+franka_teach_msgs/ExecutorStatus final_status
+---
+franka_teach_msgs/ExecutorStatus status

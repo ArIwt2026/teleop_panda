@@ -1,0 +1,5 @@
+# Select which detected target to pick (0-indexed)
+uint32 target_index
+---
+bool success
+string message

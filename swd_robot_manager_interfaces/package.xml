@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>swd_robot_manager_interfaces</name>
+  <version>1.0.0</version>
+  <description>Shared action interfaces for ez-wheel station navigation.</description>
+  <maintainer email="user@todo.todo">swd_sk</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+  <depend>action_msgs</depend>
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  <member_of_group>rosidl_interface_packages</member_of_group>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

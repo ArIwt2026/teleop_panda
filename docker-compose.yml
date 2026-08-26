@@ -1,0 +1,44 @@
+services:
+  panda_workspace:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lf205_panda_workspace:fer1
+    container_name: lf205_panda_workspace_nonpersistent
+    restart: "no"
+    network_mode: host
+    ipc: host
+    pid: host
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      - QT_X11_NO_MITSHM=1
+      - ROS_LOG_DIR=/workspace/src/LF205_ROS_Panda/log
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      # Keep hot-plugged USB/V4L devices visible. Binding individual video
+      # nodes leaves stale device handles after a camera USB reset.
+      - /dev:/dev
+
+      # Mount X11 display socket for GUI applications (RViz2)
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+    # To enable hardware acceleration on NVIDIA GPUs, use the override file:
+    #   docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up
+
+    # No ROS nodes are started automatically. Use `docker compose run` with
+    # an explicit command when you want to launch a node or camera.

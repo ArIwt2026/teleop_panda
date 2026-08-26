@@ -1,0 +1,30 @@
+# --- ROS 2 / Colcon ---
+build/
+install/
+log/
+
+# --- Machine Learning & Models ---
+runs/
+*.onnx
+*.pt
+*.pth
+*.weights
+
+# --- Datasets & Data ---
+calibration_data/
+bag/
+*.bag
+
+# --- Runtime State ---
+iwt_bandlaufsystem/config/storage_status.yaml
+
+# --- Python ---
+__pycache__/
+*.pyc
+
+# --- OS Specific ---
+.DS_Store
+
+# --- External Untracked Dependencies ---
+libfranka/
+external/snap7/

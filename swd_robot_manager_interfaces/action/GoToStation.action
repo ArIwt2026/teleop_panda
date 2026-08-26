@@ -1,0 +1,17 @@
+uint8 PANDA_STATION=1
+uint8 COLLECTION_STATION=2
+uint8 DOCKING_STATION=3
+uint8 station_id
+---
+bool success
+uint8 ERROR_NONE=0
+uint8 ERROR_NAVIGATION=1
+uint8 ERROR_CANCELLED=2
+uint8 error_code
+float32 distance_moved
+---
+uint8 PHASE_FORWARD_CORRECTION=1
+uint8 PHASE_NAVIGATING=2
+uint8 PHASE_REVERSING=3
+uint8 phase
+float32 distance_remaining
