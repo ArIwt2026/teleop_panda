@@ -64,7 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
         "go-camera-pose",
         help="Plan or execute one camera-frame pose target directly through the executor.",
     )
-    go_camera_pose.add_argument("--frame", default="camera_front_link", help="Camera frame id.")
+    go_camera_pose.add_argument("--frame", default="panda_hand_camera_link", help="Camera frame id.")
     go_camera_pose.add_argument("--x", type=float, required=True)
     go_camera_pose.add_argument("--y", type=float, required=True)
     go_camera_pose.add_argument("--z", type=float, required=True)

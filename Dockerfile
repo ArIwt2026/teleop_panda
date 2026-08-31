@@ -49,6 +49,7 @@ RUN apt-get update && apt-get install -y \
     ros-humble-joint-state-broadcaster \
     ros-humble-joint-trajectory-controller \
     ros-humble-pilz-industrial-motion-planner \
+    ros-humble-rmw-cyclonedds-cpp \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory

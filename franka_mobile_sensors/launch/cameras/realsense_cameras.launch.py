@@ -19,6 +19,7 @@ from franka_mobile_sensors.cameras.camera_configs import (
 from launch import LaunchContext, LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.actions import Node
 
 
@@ -46,7 +47,8 @@ def create_camera_nodes(
         # Build base params - use serial_no if available, otherwise usb_port_id
         base_params = {'camera_name': camera_name}
         if camera.serial_number:
-            base_params['serial_no'] = camera.serial_number
+            base_params['serial_no'] = ParameterValue(
+                camera.serial_number, value_type=str)
         elif camera.usb_port:
             base_params['usb_port_id'] = camera.usb_port
         else:

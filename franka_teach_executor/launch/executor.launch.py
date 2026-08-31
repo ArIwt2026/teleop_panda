@@ -145,7 +145,7 @@ def generate_launch_description():
         arguments=[
             '-0.022542648636446606', '-0.04542167475614861', '0.03449884974187979',
             '0.023201672357022737', '-0.027023357208746875', '0.7093108444496831', '0.7039954165412466',
-            'panda_link8', 'camera_front_link'
+            'panda_link8', 'panda_hand_camera_link'
         ],
         output='screen'
     )
@@ -157,7 +157,7 @@ def generate_launch_description():
             DeclareLaunchArgument("joint_state_topic", default_value="/joint_states"),
             DeclareLaunchArgument("robot_state_topic", default_value="/franka_robot_state_broadcaster/robot_state"),
             DeclareLaunchArgument("base_frame", default_value="panda_link0"),
-            DeclareLaunchArgument("camera_frame", default_value="camera_front_link"),
+            DeclareLaunchArgument("camera_frame", default_value="panda_hand_camera_link"),
             DeclareLaunchArgument("calibration_result_path", default_value=""),
             DeclareLaunchArgument("enable_robot_state_monitoring", default_value="true"),
             DeclareLaunchArgument("robot_ip", default_value="dont-care"),

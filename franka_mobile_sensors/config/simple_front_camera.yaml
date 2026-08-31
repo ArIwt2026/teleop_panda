@@ -3,9 +3,9 @@ name: "Simple Front Camera"
 description: "Single camera (D455) for AprilTag picking"
 
 cameras: 
-  - name: "camera_front"
-    namespace: "camera_front" 
-    serial_number: "035122250662"  # Use serial number instead of USB port
+  - name: "d455"
+    namespace: "panda"
+    usb_port: "2-5.1.4"  # D455 035122250662
     device_profile: "franka_mobile_d455"
     
 network:

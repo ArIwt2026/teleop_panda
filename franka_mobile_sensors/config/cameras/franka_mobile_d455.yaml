@@ -26,3 +26,4 @@ enable_sync: false
 global_time_enabled: false
 initial_reset: true
 device_type: "d455"
+tf_prefix: "panda_"

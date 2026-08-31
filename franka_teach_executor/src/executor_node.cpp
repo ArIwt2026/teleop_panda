@@ -233,7 +233,7 @@ ExecutorNode::ExecutorNode() : rclcpp::Node("franka_teach_executor") {
   joint_state_topic_ = declare_parameter<std::string>("joint_state_topic", "/franka/joint_states");
   robot_state_topic_ = declare_parameter<std::string>("robot_state_topic", "/franka/robot_state");
   base_frame_ = declare_parameter<std::string>("base_frame", "panda_link0");
-  camera_frame_ = declare_parameter<std::string>("camera_frame", "camera_front_link");
+  camera_frame_ = declare_parameter<std::string>("camera_frame", "panda_hand_camera_link");
   calibration_result_path_ = declare_parameter<std::string>("calibration_result_path", "");
   
   // Try to auto-detect calibration if not provided
@@ -379,15 +379,15 @@ void ExecutorNode::initialize() {
   loadWorkpieceConfig();
 
   workpiece_color_sub_ = this->create_subscription<sensor_msgs::msg::Image>(
-      "/camera_front/camera_front/color/image_raw", 10,
+      "/panda/d455/color/image_raw", 10,
       std::bind(&ExecutorNode::colorCallback, this, std::placeholders::_1));
 
   workpiece_depth_sub_ = this->create_subscription<sensor_msgs::msg::Image>(
-      "/camera_front/camera_front/aligned_depth_to_color/image_raw", 10,
+      "/panda/d455/depth/image_rect_raw", 10,
       std::bind(&ExecutorNode::depthCallback, this, std::placeholders::_1));
 
   workpiece_camera_info_sub_ = this->create_subscription<sensor_msgs::msg::CameraInfo>(
-      "/camera_front/camera_front/color/camera_info", 10,
+      "/panda/d455/color/camera_info", 10,
       std::bind(&ExecutorNode::cameraInfoCallback, this, std::placeholders::_1));
 
   workpiece_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/detected_marker_pose", 10);

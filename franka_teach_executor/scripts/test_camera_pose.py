@@ -16,7 +16,7 @@ class TestCameraPoseClient(Node):
         goal_msg = GoToCameraPose.Goal()
         
         target = PoseStamped()
-        target.header.frame_id = 'camera_front_link'
+    target.header.frame_id = 'panda_hand_camera_link'
         target.header.stamp = self.get_clock().now().to_msg()
         
         # Position: z_offset meters in front of the camera
