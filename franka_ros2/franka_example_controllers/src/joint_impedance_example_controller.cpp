@@ -50,10 +50,12 @@ controller_interface::return_type JointImpedanceExampleController::update(
     const rclcpp::Duration& /*period*/) {
   updateJointStates();
   Vector7d q_goal = initial_q_;
-  auto time = this->get_node()->now() - start_time_;
-  double delta_angle = M_PI / 8.0 * (1 - std::cos(M_PI / 2.5 * time.seconds()));
-  q_goal(3) += delta_angle;
-  q_goal(4) += delta_angle;
+  if (!hold_position_) {
+    auto time = this->get_node()->now() - start_time_;
+    double delta_angle = M_PI / 8.0 * (1 - std::cos(M_PI / 2.5 * time.seconds()));
+    q_goal(3) += delta_angle;
+    q_goal(4) += delta_angle;
+  }
 
   const double kAlpha = 0.99;
   dq_filtered_ = (1 - kAlpha) * dq_filtered_ + kAlpha * dq_;
@@ -75,6 +77,7 @@ CallbackReturn JointImpedanceExampleController::on_init() {
     auto_declare<std::string>("arm_id", "panda");
     auto_declare<std::vector<double>>("k_gains", {});
     auto_declare<std::vector<double>>("d_gains", {});
+    auto_declare<bool>("hold_position", false);
   } catch (const std::exception& e) {
     fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
     return CallbackReturn::ERROR;
@@ -85,6 +88,7 @@ CallbackReturn JointImpedanceExampleController::on_init() {
 CallbackReturn JointImpedanceExampleController::on_configure(
     const rclcpp_lifecycle::State& /*previous_state*/) {
   arm_id_ = get_node()->get_parameter("arm_id").as_string();
+  hold_position_ = get_node()->get_parameter("hold_position").as_bool();
   auto k_gains = get_node()->get_parameter("k_gains").as_double_array();
   auto d_gains = get_node()->get_parameter("d_gains").as_double_array();
   if (k_gains.empty()) {

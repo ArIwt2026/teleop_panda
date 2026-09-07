@@ -49,6 +49,7 @@ class JointImpedanceExampleController : public controller_interface::ControllerI
   Vector7d dq_filtered_;
   Vector7d k_gains_;
   Vector7d d_gains_;
+  bool hold_position_{false};
   rclcpp::Time start_time_;
   void updateJointStates();
 };

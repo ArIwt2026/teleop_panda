@@ -22,8 +22,8 @@ int main(int argc, char** argv) {
   }
 
   // Compliance parameters
-  const double translational_stiffness{150.0};
-  const double rotational_stiffness{10.0};
+  const double translational_stiffness{0.0};
+  const double rotational_stiffness{0.0};
   Eigen::MatrixXd stiffness(6, 6), damping(6, 6);
   stiffness.setZero();
   stiffness.topLeftCorner(3, 3) << translational_stiffness * Eigen::MatrixXd::Identity(3, 3);
@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
 
   try {
     // connect to robot
-    franka::Robot robot(argv[1]);
+    franka::Robot robot(argv[1], franka::RealtimeConfig::kIgnore);
     setDefaultBehavior(robot);
     // load the kinematics and dynamics model
     franka::Model model = robot.loadModel();

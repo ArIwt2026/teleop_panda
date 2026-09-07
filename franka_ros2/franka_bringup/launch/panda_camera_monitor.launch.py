@@ -10,7 +10,7 @@ from launch.actions import GroupAction, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
-from launch_ros.actions import PushRosNamespace
+from launch_ros.actions import Node, PushRosNamespace
 
 
 def generate_launch_description():
@@ -46,6 +46,18 @@ def generate_launch_description():
     robot_group = GroupAction([
         PushRosNamespace('panda'),
         robot,
+        Node(
+            package='controller_manager',
+            executable='spawner',
+            arguments=['gravity_compensation_example_controller', '--inactive'],
+            output='screen',
+        ),
+        Node(
+            package='controller_manager',
+            executable='spawner',
+            arguments=['joint_impedance_hold_controller'],
+            output='screen',
+        ),
     ])
 
     return LaunchDescription([

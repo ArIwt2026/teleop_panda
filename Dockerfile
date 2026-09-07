@@ -72,13 +72,11 @@ RUN git clone --branch 0.9.2 --depth 1 --recurse-submodules https://github.com/f
 COPY . /workspace/src/teleop_panda
 
 # Build ROS 2 workspace — scan all package trees under src/
-# Skip franka_debug_tools (standalone debug utils, not needed for runtime)
 RUN . /opt/ros/humble/setup.sh && \
     colcon build \
         --base-paths src \
         --allow-overriding franka_msgs franka_teach_msgs \
         --ignore-src \
-        --packages-skip franka_debug_tools \
         --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 # Setup entrypoint
