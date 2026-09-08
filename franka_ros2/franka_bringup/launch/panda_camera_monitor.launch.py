@@ -49,7 +49,7 @@ def generate_launch_description():
         Node(
             package='controller_manager',
             executable='spawner',
-            arguments=['gravity_compensation_example_controller', '--inactive'],
+            arguments=['joint_impedance_zero_controller', '--inactive'],
             output='screen',
         ),
         Node(

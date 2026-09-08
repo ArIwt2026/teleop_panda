@@ -2,8 +2,8 @@ controller_manager:
   ros__parameters:
     update_rate: 1000  # Hz
 
-    gravity_compensation_example_controller:
-      type: franka_example_controllers/GravityCompensationExampleController
+    joint_impedance_zero_controller:
+      type: franka_example_controllers/JointImpedanceExampleController
     joint_impedance_hold_controller:
       type: franka_example_controllers/JointImpedanceExampleController
 
@@ -30,8 +30,8 @@ controller_manager:
 panda/controller_manager:
   ros__parameters:
     update_rate: 1000
-    gravity_compensation_example_controller:
-      type: franka_example_controllers/GravityCompensationExampleController
+    joint_impedance_zero_controller:
+      type: franka_example_controllers/JointImpedanceExampleController
     joint_impedance_hold_controller:
       type: franka_example_controllers/JointImpedanceExampleController
     joint_state_broadcaster:
@@ -53,8 +53,15 @@ panda/joint_impedance_hold_controller:
     hold_position: true
     # Conservative position hold gains: enough to hold the captured pose
     # without using the very stiff example-controller values.
-    k_gains: [50.0, 50.0, 50.0, 40.0, 25.0, 15.0, 8.0]
-    d_gains: [8.0, 8.0, 8.0, 6.0, 4.0, 2.5, 1.5]
+    k_gains: [250.0, 250.0, 250.0, 200.0, 125.0, 75.0, 40.0]
+    d_gains: [20.0, 20.0, 20.0, 16.0, 10.0, 6.0, 3.0]
+
+panda/joint_impedance_zero_controller:
+  ros__parameters:
+    arm_id: panda
+    hold_position: true
+    k_gains: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    d_gains: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
 
 model_example_controller:
   ros__parameters:
