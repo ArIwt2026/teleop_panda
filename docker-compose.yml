@@ -29,10 +29,12 @@ services:
       - /dev:/dev
       - ../cyclonedds.xml:/config/cyclonedds.xml:ro
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./franka_mobile_sensors/config/cameras/franka_mobile_d455.yaml:/workspace/install/franka_mobile_sensors/share/franka_mobile_sensors/config/cameras/franka_mobile_d455.yaml:ro
+      - ./franka_mobile_sensors/config/cameras/franka_mobile_d455.yaml:/workspace/src/teleop_panda/franka_mobile_sensors/config/cameras/franka_mobile_d455.yaml:ro
     command: >-
       bash -lc "source /opt/ros/humble/setup.bash &&
       source /workspace/install/setup.bash &&
-      exec ros2 launch franka_bringup panda_camera_monitor.launch.py
+      exec ros2 launch franka_debug_tools panda_direct_impedance.launch.py
       robot_ip:=172.16.0.2"
     logging:
       driver: json-file

@@ -79,6 +79,15 @@ RUN . /opt/ros/humble/setup.sh && \
         --ignore-src \
         --cmake-args -DCMAKE_BUILD_TYPE=Release
 
+# The direct Cartesian mode is a standalone libfranka ROS node. Build it
+# explicitly so a fresh image contains its executable and launch file.
+RUN . /opt/ros/humble/setup.sh && \
+    . /workspace/install/setup.sh && \
+    colcon build \
+        --base-paths src/teleop_panda \
+        --packages-select franka_debug_tools \
+        --cmake-args -DCMAKE_BUILD_TYPE=Release
+
 # Setup entrypoint
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

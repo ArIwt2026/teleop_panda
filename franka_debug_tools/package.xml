@@ -14,4 +14,10 @@
   <depend>rclcpp_action</depend>
   <depend>geometry_msgs</depend>
   <depend>franka_teach_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_srvs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
 </package>

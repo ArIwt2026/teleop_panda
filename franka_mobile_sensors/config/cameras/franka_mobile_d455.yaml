@@ -21,7 +21,10 @@ temporal_filter.enable: false
 disparity_filter.enable: false      
 hole_filling_filter.enable: false   
 hdr_merge.enable: false    
-rgb_camera.color_profile: 1280x800x30
+rgb_camera.color_profile: 848x480x30
+rgb_camera.profile: 848x480x30
+depth_module.depth_profile: 848x480x30
+depth_module.profile: 848x480x30
 enable_sync: false
 global_time_enabled: false
 initial_reset: true
