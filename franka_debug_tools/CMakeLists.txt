@@ -81,3 +81,4 @@ install(DIRECTORY launch/
 )
 
 ament_package()
+install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/config)

@@ -39,7 +39,9 @@ def generate_launch_description():
         gripper_launch,
         Node(package='franka_debug_tools', executable='direct_cartesian_impedance',
              name='direct_cartesian_impedance', output='screen',
-             parameters=[{'robot_ip': robot_ip}]),
+             parameters=[PathJoinSubstitution([
+                 FindPackageShare('franka_debug_tools'), 'config', 'joint_limits.yaml']),
+                 {'robot_ip': robot_ip}]),
     ])
 
     return LaunchDescription([

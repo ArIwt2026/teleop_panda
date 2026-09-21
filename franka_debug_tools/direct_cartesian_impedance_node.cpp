@@ -22,6 +22,8 @@
 #include <std_srvs/srv/trigger.hpp>
 
 #include "examples_common.h"
+#include "joint_limit_guard.hpp"
+#include <vector>
 
 namespace {
 constexpr double kCollisionThreshold = 100.0;
@@ -33,6 +35,22 @@ class DirectCartesianImpedance final : public rclcpp::Node {
   explicit DirectCartesianImpedance(const rclcpp::NodeOptions &options)
       : Node("direct_cartesian_impedance", options),
         robot_ip_(declare_parameter<std::string>("robot_ip", "172.16.0.2")) {
+    auto read_array = [this](const char *name) {
+      const auto values=declare_parameter<std::vector<double>>(name, std::vector<double>{});
+      if (values.size()!=7) throw std::invalid_argument(std::string(name)+" requires 7 values");
+      std::array<double,7> result;
+      std::copy(values.begin(), values.end(), result.begin());
+      return result;
+    };
+    guard_.lower=read_array("limit_lower");
+    guard_.upper=read_array("limit_upper");
+    guard_.stiffness=read_array("limit_stiffness");
+    guard_.damping=read_array("limit_damping");
+    guard_.torque_cap=read_array("limit_torque_cap");
+    guard_.activation=declare_parameter("limit_activation_deg",10.0)*M_PI/180.0;
+    guard_.reserve=declare_parameter("limit_reserve_deg",3.0)*M_PI/180.0;
+    guard_.prediction=declare_parameter("limit_prediction_seconds",0.1);
+    guard_.validate();
     joint_state_publisher_ = create_publisher<sensor_msgs::msg::JointState>(
         "franka/joint_states", rclcpp::QoS(10));
     joint_state_timer_ = create_wall_timer(kJointStatePeriod, [this] { publishJointState(); });
@@ -118,8 +136,9 @@ class DirectCartesianImpedance final : public rclcpp::Node {
 
       try {
         runSession(mode, generation);
-      } catch (const franka::Exception &exception) {
-        std::lock_guard<std::mutex> lock(control_mutex_);
+      } catch (const std::exception &exception) {
+        std::unique_lock<std::mutex> lock(control_mutex_);
+        has_state_.store(false);
         last_error_ = exception.what();
         active_mode_ = Mode::kIdle;
         requested_mode_ = Mode::kIdle;
@@ -129,8 +148,7 @@ class DirectCartesianImpedance final : public rclcpp::Node {
         RCLCPP_ERROR(get_logger(), "Direct Cartesian impedance stopped: %s", exception.what());
         // Keep the node and service alive, but do not start another session
         // until a new toggle request explicitly retries after fault recovery.
-        std::unique_lock<std::mutex> retry_lock(control_mutex_);
-        control_cv_.wait(retry_lock, [this, generation] {
+        control_cv_.wait(lock, [this, generation] {
           return shutdown_requested_ || requested_generation_ > generation;
         });
         if (shutdown_requested_) {
@@ -152,14 +170,15 @@ class DirectCartesianImpedance final : public rclcpp::Node {
   void runSession(Mode mode, uint64_t generation) {
     franka::Robot robot(robot_ip_, franka::RealtimeConfig::kIgnore);
 
-    {
+    auto mark_started = [this, mode, generation]() {
       std::lock_guard<std::mutex> lock(control_mutex_);
       active_mode_ = mode;
       started_generation_ = generation;
       transition_in_progress_ = false;
-    }
-    control_cv_.notify_all();
+      control_cv_.notify_all();
+    };
     if (mode == Mode::kIdle) {
+      mark_started();
       RCLCPP_INFO(get_logger(), "Starting direct Panda state-monitoring session.");
       robot.read([this](const franka::RobotState &robot_state) {
         publishRealtimeState(robot_state);
@@ -168,6 +187,12 @@ class DirectCartesianImpedance final : public rclcpp::Node {
       return;
     }
 
+    const auto initial=robot.readOnce();
+    if (static_cast<bool>(initial.current_errors) || initial.robot_mode != franka::RobotMode::kIdle)
+      throw std::runtime_error("Robot must be idle with current errors cleared before starting");
+    for (size_t i=0; i<7; ++i)
+      if (!guard_.inside(i,initial.q[i]))
+        throw std::runtime_error("Joint outside configured physical limits; recover position before retry");
     setDefaultBehavior(robot);
     robot.setCollisionBehavior(
         {{kCollisionThreshold, kCollisionThreshold, kCollisionThreshold, kCollisionThreshold,
@@ -180,18 +205,27 @@ class DirectCartesianImpedance final : public rclcpp::Node {
           kCollisionThreshold, kCollisionThreshold}});
     franka::Model model = robot.loadModel();
     RCLCPP_INFO(get_logger(), "Starting direct zero Cartesian impedance session.");
-    robot.control([this, &model](const franka::RobotState &robot_state,
+    bool first=true;
+    robot.control([this, &model, &first, &mark_started](const franka::RobotState &robot_state,
                                  franka::Duration) -> franka::Torques {
+      if (static_cast<bool>(robot_state.current_errors))
+        throw std::runtime_error("Robot current_errors active; control stopped");
+      for (size_t i=0; i<7; ++i)
+        if (!guard_.inside(i,robot_state.q[i]) || !std::isfinite(robot_state.dq[i]))
+          throw std::runtime_error("Physical joint limit reached or invalid state; control stopped");
+      if (first) { mark_started(); first=false; }
       publishRealtimeState(robot_state);
       const std::array<double, 7> coriolis_array = model.coriolis(robot_state);
       const Eigen::Map<const Eigen::Matrix<double, 7, 1>> coriolis(coriolis_array.data());
       std::array<double, 7> tau_d_array{};
       Eigen::Map<Eigen::Matrix<double, 7, 1>>(tau_d_array.data()) = coriolis;
+      for (size_t i=0; i<7; ++i)
+        tau_d_array[i] += guard_.torque(i, robot_state.q[i], robot_state.dq[i]);
       if (stop_requested_.load()) {
         return franka::MotionFinished(franka::Torques(tau_d_array));
       }
       return tau_d_array;
-    });
+    }, true, 100.0);
   }
 
   void publishRealtimeState(const franka::RobotState &state) {
@@ -219,6 +253,7 @@ class DirectCartesianImpedance final : public rclcpp::Node {
   }
 
   const std::string robot_ip_;
+  JointLimitGuard guard_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_publisher_;
   rclcpp::TimerBase::SharedPtr joint_state_timer_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr toggle_service_;
