@@ -53,6 +53,7 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(franka_teach_msgs REQUIRED)
+find_package(franka_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 
@@ -62,7 +63,7 @@ add_executable(direct_cartesian_impedance
 )
 target_include_directories(direct_cartesian_impedance PRIVATE ${LIBFRANKA_EXAMPLES_DIR})
 target_link_libraries(direct_cartesian_impedance Franka::Franka Eigen3::Eigen)
-ament_target_dependencies(direct_cartesian_impedance rclcpp sensor_msgs std_srvs)
+ament_target_dependencies(direct_cartesian_impedance rclcpp sensor_msgs franka_msgs std_srvs)
 
 # Install executables and libraries
 set(DEBUG_TARGETS echo_robot_state test_gripper impedance_control direct_cartesian_impedance zero_torque_control check_fci)
