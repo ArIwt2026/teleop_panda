@@ -54,6 +54,7 @@ class FrankaHardwareInterface : public hardware_interface::SystemInterface {
                                         const rclcpp::Duration& period) override;
   CallbackReturn on_init(const hardware_interface::HardwareInfo& info) override;
   static const size_t kNumberOfJoints = 7;
+  static const size_t kNumberOfWrenchElements = 6;
 
  private:
   std::unique_ptr<Robot> robot_;
@@ -61,6 +62,7 @@ class FrankaHardwareInterface : public hardware_interface::SystemInterface {
   std::array<double, kNumberOfJoints> hw_positions_{0, 0, 0, 0, 0, 0, 0};
   std::array<double, kNumberOfJoints> hw_velocities_{0, 0, 0, 0, 0, 0, 0};
   std::array<double, kNumberOfJoints> hw_efforts_{0, 0, 0, 0, 0, 0, 0};
+  std::array<double, kNumberOfWrenchElements> hw_force_torque_sensor_{0, 0, 0, 0, 0, 0};
   franka::RobotState hw_franka_robot_state_;
   franka::RobotState* hw_franka_robot_state_addr_ = &hw_franka_robot_state_;
   Model* hw_franka_model_ptr_ = nullptr;

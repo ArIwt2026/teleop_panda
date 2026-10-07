@@ -23,4 +23,10 @@
             The franka model example controller evaluates and prints the dynamic model of Franka Emika Robots.
         </description>
     </class>
+    <class name="franka_example_controllers/CartesianImpedanceExampleController"
+           type="franka_example_controllers::CartesianImpedanceExampleController" base_class_type="controller_interface::ChainableControllerInterface">
+        <description>
+            Cartesian impedance controller with forward kinematics joint overlay and test TCP sinusoidal overlay.
+        </description>
+    </class>
 </library>

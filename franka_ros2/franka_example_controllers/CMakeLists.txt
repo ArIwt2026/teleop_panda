@@ -25,10 +25,14 @@ find_package(Eigen3 REQUIRED)
 find_package(Franka REQUIRED)
 find_package(franka_semantic_components)
 find_package(generate_parameter_library REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(control_msgs REQUIRED)
 
 add_library(
         ${PROJECT_NAME}
         SHARED
+        src/cartesian_impedance_example_controller.cpp
         src/gravity_compensation_example_controller.cpp
         src/joint_impedance_example_controller.cpp
         src/model_example_controller.cpp
@@ -48,6 +52,9 @@ ament_target_dependencies(
         rclcpp
         rclcpp_lifecycle
         franka_semantic_components
+        geometry_msgs
+        sensor_msgs
+        control_msgs
 )
 
 generate_parameter_library(franka_example_controllers_parameters src/model_example_controller_parameters.yaml)

@@ -48,6 +48,9 @@ RUN apt-get update && apt-get install -y \
     ros-humble-ament-cmake-clang-format \
     ros-humble-joint-state-broadcaster \
     ros-humble-joint-trajectory-controller \
+    ros-humble-admittance-controller \
+    ros-humble-kinematics-interface \
+    ros-humble-kinematics-interface-kdl \
     ros-humble-pilz-industrial-motion-planner \
     ros-humble-rmw-cyclonedds-cpp \
     && rm -rf /var/lib/apt/lists/*
@@ -75,7 +78,7 @@ COPY . /workspace/src/teleop_panda
 RUN . /opt/ros/humble/setup.sh && \
     colcon build \
         --base-paths src \
-        --allow-overriding franka_msgs franka_teach_msgs \
+        --allow-overriding franka_msgs franka_teach_msgs admittance_controller \
         --ignore-src \
         --cmake-args -DCMAKE_BUILD_TYPE=Release
 

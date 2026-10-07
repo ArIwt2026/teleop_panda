@@ -36,6 +36,9 @@ RUN apt-get update -y && apt-get install -y --allow-unauthenticated \
     ros-humble-control-toolbox \    
     ros-humble-controller-manager \
     ros-humble-hardware-interface \
+    ros-humble-admittance-controller \
+    ros-humble-kinematics-interface \
+    ros-humble-kinematics-interface-kdl \
     ros-humble-generate-parameter-library \
     ros-humble-controller-interface \
     ros-humble-ros2-control-test-assets \

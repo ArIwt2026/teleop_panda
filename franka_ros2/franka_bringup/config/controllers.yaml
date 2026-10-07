@@ -19,6 +19,11 @@ controller_manager:
     joint_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
+    cartesian_impedance_controller:
+      type: franka_example_controllers/CartesianImpedanceExampleController
+    admittance_controller:
+      type: admittance_controller/AdmittanceController
+
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
     
@@ -30,6 +35,10 @@ controller_manager:
 panda/controller_manager:
   ros__parameters:
     update_rate: 1000
+    cartesian_impedance_controller:
+      type: franka_example_controllers/CartesianImpedanceExampleController
+    admittance_controller:
+      type: admittance_controller/AdmittanceController
     joint_impedance_zero_controller:
       type: franka_example_controllers/JointImpedanceExampleController
     joint_impedance_hold_controller:
@@ -62,6 +71,91 @@ panda/joint_impedance_zero_controller:
     hold_position: true
     k_gains: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     d_gains: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+cartesian_impedance_controller:
+  ros__parameters:
+    arm_id: panda
+    k_gains: [100.0, 100.0, 100.0, 50.0, 50.0, 50.0]
+    d_gains: [20.0, 20.0, 20.0, 7.0, 7.0, 7.0]
+    nullspace_stiffness: 5.0
+    nullspace_damping: 0.5
+    test_sinusoid: false
+    sinusoid_amplitude: 0.03
+    sinusoid_frequency: 0.2
+    sinusoid_axis: "z"
+    admittance_mode: false
+
+panda/cartesian_impedance_controller:
+  ros__parameters:
+    arm_id: panda
+    k_gains: [100.0, 100.0, 100.0, 50.0, 50.0, 50.0]
+    d_gains: [20.0, 20.0, 20.0, 7.0, 7.0, 7.0]
+    nullspace_stiffness: 5.0
+    nullspace_damping: 0.5
+    test_sinusoid: false
+    sinusoid_amplitude: 0.03
+    sinusoid_frequency: 0.2
+    sinusoid_axis: "z"
+    admittance_mode: false
+
+panda/admittance_controller:
+  ros__parameters:
+    joints:
+      - panda_joint1
+      - panda_joint2
+      - panda_joint3
+      - panda_joint4
+      - panda_joint5
+      - panda_joint6
+      - panda_joint7
+    command_joints:
+      - cartesian_impedance_controller/panda_joint1
+      - cartesian_impedance_controller/panda_joint2
+      - cartesian_impedance_controller/panda_joint3
+      - cartesian_impedance_controller/panda_joint4
+      - cartesian_impedance_controller/panda_joint5
+      - cartesian_impedance_controller/panda_joint6
+      - cartesian_impedance_controller/panda_joint7
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    chainable_command_interfaces:
+      - position
+      - velocity
+    kinematics:
+      plugin_name: kinematics_interface_kdl/KinematicsInterfaceKDL
+      plugin_package: kinematics_interface
+      base: panda_link0
+      tip: panda_hand_tcp
+      alpha: 0.01
+    ft_sensor:
+      name: panda_tcp
+      frame:
+        id: panda_hand_tcp
+      filter_coefficient: 0.05
+    control:
+      frame:
+        id: panda_hand_tcp
+    fixed_world_frame:
+      frame:
+        id: panda_link0
+    gravity_compensation:
+      frame:
+        id: panda_hand_tcp
+      CoG:
+        pos: [0.0, 0.0, 0.0]
+        force: 0.0
+    admittance:
+      selected_axes: [true, true, true, true, true, true]
+      mass: [5.0, 5.0, 5.0, 0.5, 0.5, 0.5]
+      damping_ratio: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      damping: [1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+      stiffness: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      joint_damping: 7.0
+    enable_parameter_update_without_reactivation: true
+
 
 model_example_controller:
   ros__parameters:

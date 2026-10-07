@@ -48,6 +48,15 @@
       <xacro:configure_joint joint_name="${ns}_joint6" initial_position="${pi/2}"/>
       <xacro:configure_joint joint_name="${ns}_joint7" initial_position="${pi/4}"/>
 
+      <sensor name="${ns}_tcp">
+        <state_interface name="force.x"/>
+        <state_interface name="force.y"/>
+        <state_interface name="force.z"/>
+        <state_interface name="torque.x"/>
+        <state_interface name="torque.y"/>
+        <state_interface name="torque.z"/>
+      </sensor>
+
     </ros2_control>
   </xacro:macro>
 </robot>

@@ -107,6 +107,38 @@ class FrankaRobotModel
   }
 
   /**
+   * Gets the 4x4 pose matrix for the given frame in base frame, calculated from arbitrary
+   * joint positions q.
+   *
+   * @param[in] frame The desired frame.
+   * @param[in] q Target joint positions (size 7).
+   * @return Vectorized 4x4 pose matrix, column-major.
+   */
+  std::array<double, 16> getPoseMatrix(const franka::Frame& frame,
+                                       const std::array<double, 7>& q) {
+    if (!initialized) {
+      initialize();
+    }
+    return robot_model->pose(frame, q, robot_state->F_T_EE, robot_state->EE_T_K);
+  }
+
+  /**
+   * Gets the 6x7 Jacobian for the given frame relative to base frame, calculated from arbitrary
+   * joint positions q.
+   *
+   * @param[in] frame The desired frame.
+   * @param[in] q Target joint positions (size 7).
+   * @return Vectorized 6x7 Jacobian, column-major.
+   */
+  std::array<double, 42> getZeroJacobian(const franka::Frame& frame,
+                                         const std::array<double, 7>& q) {
+    if (!initialized) {
+      initialize();
+    }
+    return robot_model->zeroJacobian(frame, q, robot_state->F_T_EE, robot_state->EE_T_K);
+  }
+
+  /**
    * Gets the 6x7 Jacobian for the given frame, relative to the given frame.
    *
    * BodyJacobian relates joint velocities to the end-effoctor twist expressed in the the given
@@ -186,6 +218,16 @@ class FrankaRobotModel
       initialize();
     }
     return robot_model->zeroJacobian(frame, *robot_state);
+  }
+
+  /**
+   * Returns reference to the current franka::RobotState.
+   */
+  const franka::RobotState& getRobotState() {
+    if (!initialized) {
+      initialize();
+    }
+    return *robot_state;
   }
 
  protected:

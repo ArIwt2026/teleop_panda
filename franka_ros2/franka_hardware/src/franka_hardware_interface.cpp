@@ -54,6 +54,30 @@ std::vector<StateInterface> FrankaHardwareInterface::export_state_interfaces() {
       k_robot_name, k_robot_model_interface_name,
       reinterpret_cast<double*>(  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
           &hw_franka_model_ptr_)));
+
+  // Force/torque sensor state interfaces (from URDF sensor declarations)
+  for (const auto& sensor : info_.sensors) {
+    for (const auto& state_interface : sensor.state_interfaces) {
+      double* value_ptr = nullptr;
+      if (state_interface.name == "force.x") {
+        value_ptr = &hw_force_torque_sensor_[0];
+      } else if (state_interface.name == "force.y") {
+        value_ptr = &hw_force_torque_sensor_[1];
+      } else if (state_interface.name == "force.z") {
+        value_ptr = &hw_force_torque_sensor_[2];
+      } else if (state_interface.name == "torque.x") {
+        value_ptr = &hw_force_torque_sensor_[3];
+      } else if (state_interface.name == "torque.y") {
+        value_ptr = &hw_force_torque_sensor_[4];
+      } else if (state_interface.name == "torque.z") {
+        value_ptr = &hw_force_torque_sensor_[5];
+      }
+      if (value_ptr != nullptr) {
+        state_interfaces.emplace_back(StateInterface(sensor.name, state_interface.name, value_ptr));
+      }
+    }
+  }
+
   return state_interfaces;
 }
 
@@ -71,6 +95,7 @@ CallbackReturn FrankaHardwareInterface::on_activate(
     const rclcpp_lifecycle::State& /*previous_state*/) {
   robot_->initializeContinuousReading();
   hw_commands_.fill(0);
+  hw_force_torque_sensor_.fill(0);
   read(rclcpp::Time(0),
        rclcpp::Duration(0, 0));  // makes sure that the robot state is properly initialized.
   RCLCPP_INFO(getLogger(), "Started");
@@ -112,6 +137,12 @@ hardware_interface::return_type FrankaHardwareInterface::read(const rclcpp::Time
   hw_positions_ = hw_franka_robot_state_.q;
   hw_velocities_ = hw_franka_robot_state_.dq;
   hw_efforts_ = hw_franka_robot_state_.tau_J;
+
+  // Negate libfranka reaction wrench (forces applied by robot on environment)
+  // to convert to standard ROS action wrench (forces applied by environment on robot)
+  for (size_t i = 0; i < kNumberOfWrenchElements; ++i) {
+    hw_force_torque_sensor_[i] = -hw_franka_robot_state_.K_F_ext_hat_K[i];
+  }
 
   if (hw_franka_model_ptr_ == nullptr) {
     hw_franka_model_ptr_ = robot_->getModel();

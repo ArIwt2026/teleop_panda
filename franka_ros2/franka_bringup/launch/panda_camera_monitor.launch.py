@@ -27,19 +27,8 @@ def generate_launch_description():
             'load_gripper': 'true',
             'use_rviz': 'false',
             'use_fake_hardware': 'false',
+            'load_admittance_controller': LaunchConfiguration('load_admittance_controller'),
         }.items(),
-    )
-
-    camera = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            PathJoinSubstitution([
-                FindPackageShare('franka_mobile_sensors'),
-                'launch',
-                'cameras',
-                'realsense_cameras.launch.py',
-            ])
-        ),
-        launch_arguments={'config_file': 'simple_front_camera'}.items(),
     )
 
     from launch.actions import DeclareLaunchArgument
@@ -55,6 +44,18 @@ def generate_launch_description():
         Node(
             package='controller_manager',
             executable='spawner',
+            arguments=['cartesian_impedance_controller', '--inactive'],
+            output='screen',
+        ),
+        Node(
+            package='controller_manager',
+            executable='spawner',
+            arguments=['admittance_controller', '--inactive'],
+            output='screen',
+        ),
+        Node(
+            package='controller_manager',
+            executable='spawner',
             arguments=['joint_impedance_hold_controller'],
             output='screen',
         ),
@@ -62,6 +63,9 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('robot_ip', description='Panda robot IP address'),
+        DeclareLaunchArgument(
+            'load_admittance_controller',
+            default_value='false',
+            description='Load and activate the Panda admittance controller.'),
         robot_group,
-        camera,
     ])
