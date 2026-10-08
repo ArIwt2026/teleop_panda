@@ -29,17 +29,22 @@ def generate_launch_description():
     )
 
     from launch.actions import DeclareLaunchArgument
-    cartesian_spawner = Node(
+    inner_controller_arg = DeclareLaunchArgument(
+        'inner_controller',
+        default_value='joint_impedance_controller',
+        description='Inner chained controller: joint_impedance_controller or cartesian_impedance_controller'
+    )
+    inner_spawner = Node(
         package='controller_manager',
         executable='spawner',
-        name='spawner_cartesian_impedance_controller',
-        arguments=['cartesian_impedance_controller'],
+        name='spawner_inner_controller',
+        arguments=[LaunchConfiguration('inner_controller')],
         output='screen',
     )
     robot_group = GroupAction([
         PushRosNamespace('panda'),
         robot,
-        cartesian_spawner,
+        inner_spawner,
     ])
 
     admittance_spawner = Node(
@@ -53,9 +58,10 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('robot_ip', description='Panda robot IP address'),
+        inner_controller_arg,
         RegisterEventHandler(
             OnProcessExit(
-                target_action=cartesian_spawner,
+                target_action=inner_spawner,
                 on_exit=[admittance_spawner],
             )
         ),

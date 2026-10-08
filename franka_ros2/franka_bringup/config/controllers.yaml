@@ -19,6 +19,8 @@ controller_manager:
     joint_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
+    joint_impedance_controller:
+      type: franka_example_controllers/JointImpedanceChainableController
     cartesian_impedance_controller:
       type: franka_example_controllers/CartesianImpedanceExampleController
     admittance_controller:
@@ -35,6 +37,8 @@ controller_manager:
 panda/controller_manager:
   ros__parameters:
     update_rate: 1000
+    joint_impedance_controller:
+      type: franka_example_controllers/JointImpedanceChainableController
     cartesian_impedance_controller:
       type: franka_example_controllers/CartesianImpedanceExampleController
     admittance_controller:
@@ -72,11 +76,17 @@ panda/joint_impedance_zero_controller:
     k_gains: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     d_gains: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
 
+panda/joint_impedance_controller:
+  ros__parameters:
+    arm_id: panda
+    k_gains: [87.5, 87.5, 87.5, 70.0, 43.8, 26.3, 14.0]
+    d_gains: [7.0, 7.0, 7.0, 5.5, 3.5, 2.2, 1.2]
+
 panda/cartesian_impedance_controller:
   ros__parameters:
     arm_id: panda
-    k_gains: [100.0, 100.0, 100.0, 10.0, 10.0, 10.0]
-    d_gains: [8.0, 8.0, 8.0, 0.6, 1.0, 1.0]
+    k_gains: [200.0, 200.0, 200.0, 50.0, 50.0, 50.0]
+    d_gains: [3.0, 3.0, 3.0, 0.0, 0.0, 0.0]
     nullspace_stiffness: 2.0  # Nm/rad; gentle preference for the posture captured on activation
     nullspace_damping: 2.0  # Nm*s/rad; resists elbow motion while allowing hand repositioning
     nullspace_max_torque: 2.0  # Nm per joint, enforced by scaling the projected vector
@@ -108,13 +118,13 @@ panda/admittance_controller:
       - panda_joint6
       - panda_joint7
     command_joints:
-      - cartesian_impedance_controller/panda_joint1
-      - cartesian_impedance_controller/panda_joint2
-      - cartesian_impedance_controller/panda_joint3
-      - cartesian_impedance_controller/panda_joint4
-      - cartesian_impedance_controller/panda_joint5
-      - cartesian_impedance_controller/panda_joint6
-      - cartesian_impedance_controller/panda_joint7
+      - joint_impedance_controller/panda_joint1
+      - joint_impedance_controller/panda_joint2
+      - joint_impedance_controller/panda_joint3
+      - joint_impedance_controller/panda_joint4
+      - joint_impedance_controller/panda_joint5
+      - joint_impedance_controller/panda_joint6
+      - joint_impedance_controller/panda_joint7
     command_interfaces:
       - position
     state_interfaces:
@@ -148,24 +158,24 @@ panda/admittance_controller:
         force: 0.0
     admittance:
       selected_axes: [true, true, true, true, true, true]
-      mass: [0.009, 0.009, 0.009, 0.005, 0.005, 0.005]
+      mass: [0.02, 0.02, 0.02, 0.005, 0.005, 0.005]
       damping_ratio: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-      damping: [1.0, 1.0, 3.0, 0.0, 0.0, 0.0]
+      damping: [0.7, 0.7, 0.7, 0.5, 0.5, 0.5]
       stiffness: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-      joint_damping: 1.0
+      joint_damping: 0.0
     # Measured-position command tuning. Panda hardware remains at 1000 Hz.
     measured_position_command:
       enabled: true
       update_rate: 100.0
       sample_time: 0.01
       jacobian_damping: 0.2
-      max_linear_velocity: 2.5
-      max_angular_velocity: 2.5
-      joint_gains: [1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0]
-      cartesian_gains: [7.0, 7.0, 3.0, 7.0, 6.0, 6.0]
-      wrench_thresholds: [0.5, 0.5, 3.0, 0.01, 0.01, 0.01]
-      joint_position_tau: 0.04
-      wrench_tau: 0.04
+      max_linear_velocity: 3.0
+      max_angular_velocity: 3.0
+      joint_gains: [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+      cartesian_gains: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      wrench_thresholds: [0.35, 0.35, 0.35, 0.02, 0.02, 0.02]
+      joint_position_tau: 0.10
+      wrench_tau: 0.08
     joint_command_state:
       publish_rate: 100.0
     enable_parameter_update_without_reactivation: true

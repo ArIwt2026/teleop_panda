@@ -33,6 +33,7 @@ add_library(
         ${PROJECT_NAME}
         SHARED
         src/cartesian_impedance_example_controller.cpp
+        src/joint_impedance_chainable_controller.cpp
         src/gravity_compensation_example_controller.cpp
         src/joint_impedance_example_controller.cpp
         src/model_example_controller.cpp

@@ -29,4 +29,10 @@
             Cartesian impedance controller with forward kinematics joint overlay and test TCP sinusoidal overlay.
         </description>
     </class>
+    <class name="franka_example_controllers/JointImpedanceChainableController"
+           type="franka_example_controllers::JointImpedanceChainableController" base_class_type="controller_interface::ChainableControllerInterface">
+        <description>
+            Joint impedance controller implementing ChainableControllerInterface for receiving joint positions from upstream controllers.
+        </description>
+    </class>
 </library>
