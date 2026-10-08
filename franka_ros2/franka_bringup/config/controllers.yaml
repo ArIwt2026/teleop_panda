@@ -152,7 +152,7 @@ panda/admittance_controller:
       damping_ratio: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
       damping: [1.0, 1.0, 3.0, 0.0, 0.0, 0.0]
       stiffness: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-      joint_damping: 0.0
+      joint_damping: 1.0
     # Measured-position command tuning. Panda hardware remains at 1000 Hz.
     measured_position_command:
       enabled: true
