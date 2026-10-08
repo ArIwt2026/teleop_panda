@@ -16,6 +16,7 @@
 
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -67,6 +68,8 @@ class CartesianImpedanceExampleController : public controller_interface::Chainab
   Vector7d q_;
   Vector7d dq_;
   Vector7d q_initial_;
+  // FK cache follows the overlay; the preferred posture is captured on activation.
+  Vector7d q_pose_reference_;
   Vector7d q_null_target_;
   Vector7d tau_last_;
 
@@ -79,6 +82,13 @@ class CartesianImpedanceExampleController : public controller_interface::Chainab
   Vector6d k_gains_;
   Vector6d d_gains_;
   double nullspace_stiffness_{0.5};
+  double nullspace_damping_{1.4142135623730951};
+  double nullspace_max_torque_{3.0};
+  double joint_limit_margin_{0.15};
+  double joint_limit_avoidance_torque_{1.0};
+  Vector7d joint_lower_limits_;
+  Vector7d joint_upper_limits_;
+  Eigen::JacobiSVD<Eigen::Matrix<double, 6, 7>> nullspace_svd_;
 
   // Sinusoidal TCP test overlay
   bool test_sinusoid_{false};
@@ -99,6 +109,12 @@ class CartesianImpedanceExampleController : public controller_interface::Chainab
   Vector7d q_overlay_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_overlay_sub_;
   rclcpp::Subscription<control_msgs::msg::AdmittanceControllerState>::SharedPtr admittance_sub_;
+
+  // Written by the update thread and reported after deactivation, outside RT.
+  int64_t max_update_ns_{0};
+  int64_t max_reference_fk_ns_{0};
+  int64_t max_model_ns_{0};
+  uint64_t updates_over_budget_{0};
 
   void updateJointStates();
   void jointOverlayCallback(const sensor_msgs::msg::JointState::SharedPtr msg);

@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "admittance_controller/admittance_controller_parameters.hpp"
+#include "admittance_controller/measured_position_command_law.hpp"
 #include "control_msgs/msg/admittance_controller_state.hpp"
 #include "control_toolbox/filters.hpp"
 #include "controller_interface/controller_interface.hpp"
@@ -187,7 +188,7 @@ protected:
   void process_wrench_measurements(
     const geometry_msgs::msg::Wrench & measured_wrench,
     const Eigen::Matrix<double, 3, 3> & sensor_world_rot,
-    const Eigen::Matrix<double, 3, 3> & cog_world_rot);
+    const Eigen::Matrix<double, 3, 3> & cog_world_rot, double dt);
 
   template <typename T1, typename T2>
   void vec_to_eigen(const std::vector<T1> & data, T2 & matrix);
@@ -205,6 +206,10 @@ protected:
 
   // admittance controllers internal state
   AdmittanceState admittance_state_{0};
+
+  MeasuredPositionCommandLaw measured_position_command_law_;
+  MeasuredPositionCommandConfig measured_position_config_;
+  Eigen::Matrix<double, 6, Eigen::Dynamic> measured_position_jacobian_;
 
   // transforms needed for admittance update
   AdmittanceTransforms admittance_transforms_;

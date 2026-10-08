@@ -17,6 +17,7 @@
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 
@@ -53,6 +54,16 @@ CallbackReturn CartesianImpedanceExampleController::on_init() {
     auto_declare<std::vector<double>>("k_gains", {300.0, 300.0, 300.0, 30.0, 30.0, 30.0});
     auto_declare<std::vector<double>>("d_gains", {35.0, 35.0, 35.0, 5.0, 5.0, 5.0});
     auto_declare<double>("nullspace_stiffness", 0.5);
+    auto_declare<double>("nullspace_damping", 1.4142135623730951);
+    auto_declare<double>("nullspace_max_torque", 3.0);
+    auto_declare<double>("joint_limit_margin", 0.15);
+    auto_declare<double>("joint_limit_avoidance_torque", 1.0);
+    // Panda limits from franka_description/robots/panda_arm.xacro. Other
+    // Franka models must supply their own limits through these parameters.
+    auto_declare<std::vector<double>>("joint_lower_limits",
+        {-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973});
+    auto_declare<std::vector<double>>("joint_upper_limits",
+        {2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973});
     auto_declare<bool>("test_sinusoid", false);
     auto_declare<double>("sinusoid_amplitude", 0.03);
     auto_declare<double>("sinusoid_frequency", 0.2);
@@ -80,6 +91,30 @@ CallbackReturn CartesianImpedanceExampleController::on_configure(
   }
 
   nullspace_stiffness_ = get_node()->get_parameter("nullspace_stiffness").as_double();
+  nullspace_damping_ = get_node()->get_parameter("nullspace_damping").as_double();
+  nullspace_max_torque_ = get_node()->get_parameter("nullspace_max_torque").as_double();
+  joint_limit_margin_ = get_node()->get_parameter("joint_limit_margin").as_double();
+  joint_limit_avoidance_torque_ = get_node()->get_parameter("joint_limit_avoidance_torque").as_double();
+  const auto lower = get_node()->get_parameter("joint_lower_limits").as_double_array();
+  const auto upper = get_node()->get_parameter("joint_upper_limits").as_double_array();
+  if (!std::isfinite(nullspace_stiffness_) || nullspace_stiffness_ < 0.0 ||
+      !std::isfinite(nullspace_damping_) || nullspace_damping_ < 0.0 ||
+      !std::isfinite(nullspace_max_torque_) || nullspace_max_torque_ <= 0.0 ||
+      !std::isfinite(joint_limit_margin_) || joint_limit_margin_ < 0.0 ||
+      !std::isfinite(joint_limit_avoidance_torque_) || joint_limit_avoidance_torque_ < 0.0 ||
+      lower.size() != kNumberOfJoints || upper.size() != kNumberOfJoints) {
+    RCLCPP_ERROR(get_node()->get_logger(), "Invalid nullspace gains, torque bound, or joint limits.");
+    return CallbackReturn::FAILURE;
+  }
+  for (int i = 0; i < kNumberOfJoints; ++i) {
+    if (!std::isfinite(lower[i]) || !std::isfinite(upper[i]) ||
+        upper[i] - lower[i] <= 2.0 * joint_limit_margin_) {
+      RCLCPP_ERROR(get_node()->get_logger(), "Invalid limits/margin for joint %d.", i + 1);
+      return CallbackReturn::FAILURE;
+    }
+    joint_lower_limits_[i] = lower[i];
+    joint_upper_limits_[i] = upper[i];
+  }
   test_sinusoid_ = get_node()->get_parameter("test_sinusoid").as_bool();
   sinusoid_amplitude_ = get_node()->get_parameter("sinusoid_amplitude").as_double();
   sinusoid_frequency_ = get_node()->get_parameter("sinusoid_frequency").as_double();
@@ -137,7 +172,12 @@ CallbackReturn CartesianImpedanceExampleController::on_activate(
   updateJointStates();
 
   q_initial_ = q_;
-  q_null_target_ = q_initial_;
+  q_pose_reference_ = q_initial_;
+  for (int i = 0; i < kNumberOfJoints; ++i) {
+    // Prefer the entry posture, with clearance if activated close to a limit.
+    q_null_target_[i] = std::clamp(q_initial_[i], joint_lower_limits_[i] + joint_limit_margin_,
+                                joint_upper_limits_[i] - joint_limit_margin_);
+  }
   tau_last_.setZero();
   has_new_overlay_.store(false);
 
@@ -155,16 +195,27 @@ CallbackReturn CartesianImpedanceExampleController::on_activate(
   orientation_d_ = Eigen::Quaterniond(initial_transform.rotation());
 
   start_time_ = get_node()->now();
+  max_update_ns_ = max_reference_fk_ns_ = max_model_ns_ = 0;
+  updates_over_budget_ = 0;
 
   RCLCPP_INFO(get_node()->get_logger(),
               "Activated. Equilibrium TCP pose: [%.3f, %.3f, %.3f]. Chained mode: %s",
               position_target_.x(), position_target_.y(), position_target_.z(),
               is_in_chained_mode() ? "true" : "false");
+  RCLCPP_INFO(get_node()->get_logger(),
+              "Nullspace posture captured on activation: stiffness %.2f Nm/rad, "
+              "damping %.2f Nm*s/rad, torque bound %.2f Nm, joint-limit margin %.2f rad.",
+              nullspace_stiffness_, nullspace_damping_, nullspace_max_torque_, joint_limit_margin_);
   return CallbackReturn::SUCCESS;
 }
 
 CallbackReturn CartesianImpedanceExampleController::on_deactivate(
     const rclcpp_lifecycle::State& /*previous_state*/) {
+  RCLCPP_INFO(get_node()->get_logger(),
+              "Cartesian timing: max update %.1f us, max reference FK %.1f us, "
+              "max measured model %.1f us, updates over 1 ms %llu",
+              max_update_ns_ / 1000.0, max_reference_fk_ns_ / 1000.0,
+              max_model_ns_ / 1000.0, static_cast<unsigned long long>(updates_over_budget_));
   franka_robot_model_->release_interfaces();
   return CallbackReturn::SUCCESS;
 }
@@ -203,7 +254,10 @@ void CartesianImpedanceExampleController::admittanceCallback(
 controller_interface::return_type
 CartesianImpedanceExampleController::update_reference_from_subscribers() {
   if (has_new_overlay_.load()) {
-    std::lock_guard<std::mutex> lock(overlay_mutex_);
+    std::unique_lock<std::mutex> lock(overlay_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) {
+      return controller_interface::return_type::OK;
+    }
     for (size_t i = 0; i < static_cast<size_t>(kNumberOfJoints) && i < reference_interfaces_.size(); ++i) {
       reference_interfaces_[i] = q_overlay_(i);
     }
@@ -216,6 +270,7 @@ controller_interface::return_type
 CartesianImpedanceExampleController::update_and_write_commands(
     const rclcpp::Time& /*time*/,
     const rclcpp::Duration& period) {
+  const auto update_started = std::chrono::steady_clock::now();
   updateJointStates();
 
   const double dt = period.seconds() > 0.0 ? period.seconds() : 0.001;
@@ -236,8 +291,9 @@ CartesianImpedanceExampleController::update_and_write_commands(
         q_ref(i) = reference_interfaces_[i];
       }
       // Only recalculate FK if the reference changed
-      if ((q_ref - q_null_target_).norm() > 1e-4) {
-        q_null_target_ = q_ref;
+      if ((q_ref - q_pose_reference_).norm() > 1e-4) {
+        const auto fk_started = std::chrono::steady_clock::now();
+        q_pose_reference_ = q_ref;
         std::array<double, 7> q_arr;
         Eigen::Map<Vector7d>(q_arr.data()) = q_ref;
         std::array<double, 16> pose_arr =
@@ -245,6 +301,9 @@ CartesianImpedanceExampleController::update_and_write_commands(
         Eigen::Affine3d t(Eigen::Matrix4d::Map(pose_arr.data()));
         position_target_ = t.translation();
         orientation_d_ = Eigen::Quaterniond(t.rotation());
+        max_reference_fk_ns_ = std::max<int64_t>(max_reference_fk_ns_,
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - fk_started).count());
       }
     }
   }
@@ -264,8 +323,9 @@ CartesianImpedanceExampleController::update_and_write_commands(
   }
 
   // 3. Current robot Cartesian state and dynamics
-  std::array<double, 16> current_pose_arr =
-      franka_robot_model_->getPoseMatrix(franka::Frame::kEndEffector);
+  const auto model_started = std::chrono::steady_clock::now();
+  // libfranka already supplies the measured end-effector transform in this state.
+  const auto& current_pose_arr = franka_robot_model_->getRobotState().O_T_EE;
   Eigen::Affine3d current_transform(Eigen::Matrix4d::Map(current_pose_arr.data()));
   Eigen::Vector3d position_curr = current_transform.translation();
   Eigen::Quaterniond orientation_curr(current_transform.rotation());
@@ -276,6 +336,9 @@ CartesianImpedanceExampleController::update_and_write_commands(
 
   std::array<double, 7> coriolis_arr = franka_robot_model_->getCoriolisForceVector();
   Eigen::Map<const Vector7d> coriolis(coriolis_arr.data());
+  max_model_ns_ = std::max<int64_t>(max_model_ns_,
+      std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::steady_clock::now() - model_started).count());
 
   // 4. Exact Franka Cartesian Error Formulation
   Vector6d error;
@@ -304,15 +367,46 @@ CartesianImpedanceExampleController::update_and_write_commands(
   // 6. Joint Torques from Task Space
   Vector7d tau_task = jacobian.transpose() * wrench;
 
-  // 7. Lightweight Nullspace Posture Damping
+  // 7. Preferred posture and damping, independent of the moving TCP reference.
   Vector7d tau_null = Vector7d::Zero();
-  if (nullspace_stiffness_ > 0.0) {
-    Eigen::Matrix<double, 6, 6> JJt = jacobian * jacobian.transpose();
-    JJt.diagonal().array() += 1e-3;
-    Eigen::Matrix<double, 7, 7> N =
-        Eigen::Matrix<double, 7, 7>::Identity() -
-        jacobian.transpose() * JJt.ldlt().solve(jacobian);
-    tau_null = N * (nullspace_stiffness_ * (q_null_target_ - q_) - 0.5 * dq_);
+  if (nullspace_stiffness_ > 0.0 || nullspace_damping_ > 0.0 ||
+      (joint_limit_margin_ > 0.0 && joint_limit_avoidance_torque_ > 0.0)) {
+    if (!jacobian.allFinite() || !q_.allFinite() || !dq_.allFinite()) {
+      return controller_interface::return_type::ERROR;
+    }
+    // Fixed-size SVD uses no heap storage. Include only numerical null directions;
+    // damped inversion would also admit task directions near singularities.
+    nullspace_svd_.compute(jacobian, Eigen::ComputeFullV);
+    if (nullspace_svd_.info() != Eigen::Success) {
+      return controller_interface::return_type::ERROR;
+    }
+    const auto& V = nullspace_svd_.matrixV();
+    Eigen::Matrix<double, 7, 7> N = V.col(6) * V.col(6).transpose();
+    const double rank_tolerance = std::max(1e-9, 1e-6 * nullspace_svd_.singularValues()[0]);
+    for (int i = 0; i < 6; ++i) {
+      if (nullspace_svd_.singularValues()[i] <= rank_tolerance) {
+        N.noalias() += V.col(i) * V.col(i).transpose();
+      }
+    }
+    Vector7d posture_torque =
+        nullspace_stiffness_ * (q_null_target_ - q_) - nullspace_damping_ * dq_;
+    if (joint_limit_margin_ > 0.0 && joint_limit_avoidance_torque_ > 0.0) {
+      for (int i = 0; i < kNumberOfJoints; ++i) {
+        const double near_lower = std::clamp(
+            (joint_lower_limits_[i] + joint_limit_margin_ - q_[i]) / joint_limit_margin_, 0.0, 1.0);
+        const double near_upper = std::clamp(
+            (q_[i] - joint_upper_limits_[i] + joint_limit_margin_) / joint_limit_margin_, 0.0, 1.0);
+        // Bounded, continuous repulsion within the margin, zero elsewhere.
+        posture_torque[i] += joint_limit_avoidance_torque_ *
+                            (near_lower * near_lower - near_upper * near_upper);
+      }
+    }
+    tau_null.noalias() = N * posture_torque;
+    // Scale the complete vector: per-joint clipping would break the projection.
+    const double largest_torque = tau_null.cwiseAbs().maxCoeff();
+    if (largest_torque > nullspace_max_torque_) {
+      tau_null *= nullspace_max_torque_ / largest_torque;
+    }
   }
 
   // 8. Total Commanded Torques with Coriolis Compensation
@@ -338,6 +432,12 @@ CartesianImpedanceExampleController::update_and_write_commands(
 #endif
   }
 
+  const auto elapsed_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::steady_clock::now() - update_started).count();
+  max_update_ns_ = std::max<int64_t>(max_update_ns_, elapsed_ns);
+  if (elapsed_ns > 1000000) {
+    ++updates_over_budget_;
+  }
   return controller_interface::return_type::OK;
 }
 

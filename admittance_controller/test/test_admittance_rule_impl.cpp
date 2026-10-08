@@ -77,6 +77,8 @@ public:
   // Expose protected members for testing
   using AdmittanceRule::calculate_admittance_rule;
   using AdmittanceRule::kinematics_;
+  using AdmittanceRule::measured_position_jacobian_;
+  using AdmittanceRule::num_joints_;
   using AdmittanceRule::parameters_;
 };
 
@@ -290,6 +292,75 @@ protected:
 // and produces motion when force is applied
 // cppcheck-suppress syntaxError
 // To suppress the warning reported by cppcheck for complex macro expansion
+class MeasuredPositionRuleIntegrationTest : public MassMatrixTransformationTest
+{
+protected:
+  void SetUp() override
+  {
+    MassMatrixTransformationTest::SetUp();
+    auto & params = admittance_rule_->parameters_;
+    params.joints = {"j1", "j2", "j3", "j4", "j5", "j6", "j7"};
+    params.measured_position_command.enabled = true;
+    params.measured_position_command.wrench_tau = 0.0;
+    params.measured_position_command.joint_position_tau = 0.0;
+    params.admittance.mass.assign(6, 0.01);
+    params.admittance.stiffness.assign(6, 0.0);
+    params.admittance.damping.assign(6, 0.0);
+    params.admittance.damping_ratio.assign(6, 0.0);
+    params.enable_parameter_update_without_reactivation = false;
+    admittance_rule_->num_joints_ = 7;
+    admittance_rule_->measured_position_jacobian_.resize(6, 7);
+    admittance_rule_->reset(7);
+    setupMockKinematics();
+    EXPECT_CALL(*mock_kinematics_ptr_, calculate_jacobian(::testing::_, ::testing::_, ::testing::_))
+      .WillRepeatedly(::testing::Invoke(
+        [](const Eigen::VectorXd &, const std::string &, Jacobian6xN & jacobian) {
+          jacobian.setIdentity();
+          return true;
+        }));
+    measured.positions.assign(7, 0.3);
+    measured.velocities.assign(7, 0.0);
+    measured.accelerations.assign(7, 0.0);
+    reference = measured;
+    reference.positions.assign(7, -0.8);
+    desired = measured;
+  }
+  trajectory_msgs::msg::JointTrajectoryPoint measured, reference, desired;
+  geometry_msgs::msg::Wrench wrench;
+};
+
+TEST_F(MeasuredPositionRuleIntegrationTest, WritesAbsoluteMeasuredPositionStepAndAppliesDeadband)
+{
+  wrench.force.x = 3.0;  // KUKA deadband removes 2 N, leaving 1 N.
+  ASSERT_EQ(
+    admittance_rule_->update(measured, wrench, reference, rclcpp::Duration::from_seconds(0.01), desired),
+    controller_interface::return_type::OK);
+  EXPECT_NEAR(desired.positions[0], 0.3 + 5.0 / 1.04 * 0.01, 1e-12);
+  const auto & status = admittance_rule_->get_controller_state();
+  EXPECT_NEAR(status.wrench_base.wrench.force.x, 1.0, 1e-12);
+  EXPECT_NEAR(status.joint_state.position[0], desired.positions[0] - reference.positions[0], 1e-12);
+  wrench.force.x = 1.0;  // Inside the deadband: command returns to measured position.
+  ASSERT_EQ(
+    admittance_rule_->update(measured, wrench, reference, rclcpp::Duration::from_seconds(0.01), desired),
+    controller_interface::return_type::OK);
+  EXPECT_DOUBLE_EQ(desired.positions[0], measured.positions[0]);
+}
+
+TEST_F(MeasuredPositionRuleIntegrationTest, KinematicsFailureHoldsMeasuredPositionAndReturnsError)
+{
+  EXPECT_CALL(*mock_kinematics_ptr_, calculate_jacobian(::testing::_, ::testing::_, ::testing::_))
+    .WillOnce(::testing::Return(false));
+  wrench.force.x = 10.0;
+  EXPECT_EQ(
+    admittance_rule_->update(measured, wrench, reference, rclcpp::Duration::from_seconds(0.01), desired),
+    controller_interface::return_type::ERROR);
+  EXPECT_EQ(desired.positions, measured.positions);
+  for (const double v : desired.velocities)
+  {
+    EXPECT_DOUBLE_EQ(v, 0.0);
+  }
+}
+
 TEST_F(MassMatrixTransformationTest, mass_matrix_transformation_consistency)
 {
   // Setup: Control frame rotated so control z-axis aligns with base x-axis

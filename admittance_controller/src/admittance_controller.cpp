@@ -17,7 +17,10 @@
 #include "admittance_controller/admittance_controller.hpp"
 
 #include <tinyxml2.h>
+#include <algorithm>
 #include <chrono>
+#include <array>
+#include <atomic>
 #include <cmath>
 #include <functional>
 #include <memory>
@@ -182,6 +185,67 @@ AdmittanceController::on_export_reference_interfaces()
 controller_interface::CallbackReturn AdmittanceController::on_configure(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
+  const auto parameters = parameter_handler_->get_params();
+  teach_mode_enabled_ = parameters.teach_mode.enabled;
+  return_max_joint_velocity_ = parameters.teach_mode.return_max_joint_velocity_rad_s;
+  if (!std::isfinite(parameters.joint_command_state.publish_rate) ||
+      parameters.joint_command_state.publish_rate <= 0.0)
+  {
+    RCLCPP_ERROR(get_node()->get_logger(), "joint_command_state.publish_rate must be positive.");
+    return CallbackReturn::FAILURE;
+  }
+  joint_command_state_publish_period_sec_ = 1.0 / parameters.joint_command_state.publish_rate;
+  if (teach_mode_enabled_)
+  {
+    const auto & home = parameters.teach_mode.home_joint_positions_rad;
+    if (num_joints_ != home_joint_positions_.size() || home.size() != home_joint_positions_.size())
+    {
+      RCLCPP_ERROR(
+        get_node()->get_logger(),
+        "teach_mode requires exactly seven joints and seven home_joint_positions_rad values.");
+      return CallbackReturn::FAILURE;
+    }
+    if (!std::isfinite(return_max_joint_velocity_) || return_max_joint_velocity_ <= 0.0)
+    {
+      RCLCPP_ERROR(get_node()->get_logger(), "return_max_joint_velocity_rad_s must be positive.");
+      return CallbackReturn::FAILURE;
+    }
+    for (size_t i = 0; i < home_joint_positions_.size(); ++i)
+    {
+      if (!std::isfinite(home[i]))
+      {
+        RCLCPP_ERROR(get_node()->get_logger(), "Home joint positions must be finite.");
+        return CallbackReturn::FAILURE;
+      }
+      home_joint_positions_[i] = home[i];
+    }
+    teach_mode_service_ = get_node()->create_service<std_srvs::srv::Trigger>(
+      "~/teach_mode/toggle",
+      [this](
+        const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+      {
+        const auto requested = requested_teach_mode_.load(std::memory_order_acquire);
+        if (requested == TeachMode::RETURN_HOME)
+        {
+          response->success = false;
+          response->message = "Returning home; wait until the robot reaches home.";
+        }
+        else if (requested == TeachMode::HOME_HOLD)
+        {
+          requested_teach_mode_.store(TeachMode::ADMITTANCE, std::memory_order_release);
+          response->success = true;
+          response->message = "Admittance teach mode requested.";
+        }
+        else
+        {
+          requested_teach_mode_.store(TeachMode::RETURN_HOME, std::memory_order_release);
+          response->success = true;
+          response->message = "Smooth return home requested.";
+        }
+      });
+  }
+
   command_joint_names_ = admittance_->parameters_.command_joints;
   if (command_joint_names_.empty())
   {
@@ -315,6 +379,18 @@ controller_interface::CallbackReturn AdmittanceController::on_configure(
   state_publisher_ =
     std::make_unique<realtime_tools::RealtimePublisher<ControllerStateMsg>>(s_publisher_);
 
+  joint_command_state_publisher_ = get_node()->create_publisher<sensor_msgs::msg::JointState>(
+    "~/joint_commands", rclcpp::SensorDataQoS());
+  joint_command_state_realtime_publisher_ =
+    std::make_unique<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(
+      joint_command_state_publisher_);
+  joint_command_state_realtime_publisher_->lock();
+  auto & command_msg = joint_command_state_realtime_publisher_->msg_;
+  command_msg.name = admittance_->parameters_.joints;
+  command_msg.position.resize(num_joints_);
+  command_msg.velocity.resize(num_joints_);
+  joint_command_state_realtime_publisher_->unlock();
+
   // Initialize state message
   state_publisher_->lock();
   state_publisher_->msg_ = admittance_->get_controller_state();
@@ -341,6 +417,7 @@ controller_interface::CallbackReturn AdmittanceController::on_activate(
   {
     return controller_interface::CallbackReturn::ERROR;
   }
+  joint_command_state_elapsed_sec_ = 0.0;
 
   // order all joints in the storage
   for (const auto & interface : admittance_->parameters_.state_interfaces)
@@ -390,11 +467,47 @@ controller_interface::CallbackReturn AdmittanceController::on_activate(
     }
   }
 
+  // Start every activation with no stored admittance motion.
+  admittance_->reset(num_joints_);
+  if (admittance_->parameters_.measured_position_command.enabled)
+  {
+    RCLCPP_INFO(
+      get_node()->get_logger(),
+      "Measured-position admittance mode: %.1f Hz calculations, %.3f s position-step period.",
+      admittance_->parameters_.measured_position_command.update_rate, admittance_->parameters_.measured_position_command.sample_time);
+  }
+
   // Use current joint_state as a default reference
   last_reference_ = joint_state_;
   last_commanded_ = joint_state_;
   reference_ = joint_state_;
   reference_admittance_ = joint_state_;
+
+  if (teach_mode_enabled_)
+  {
+    start_return_home_from_measured_state();
+    double max_delta = 0.0;
+    for (size_t i = 0; i < home_joint_positions_.size(); ++i)
+    {
+      max_delta = std::max(max_delta, std::abs(home_joint_positions_[i] - return_start_positions_[i]));
+    }
+    if (max_delta < 1e-3)
+    {
+      active_teach_mode_ = TeachMode::HOME_HOLD;
+      requested_teach_mode_.store(TeachMode::HOME_HOLD, std::memory_order_release);
+      set_home_hold_command();
+      RCLCPP_INFO(get_node()->get_logger(), "Already at configured Panda home position; holding.");
+    }
+    else
+    {
+      active_teach_mode_ = TeachMode::RETURN_HOME;
+      requested_teach_mode_.store(TeachMode::RETURN_HOME, std::memory_order_release);
+      RCLCPP_INFO(
+        get_node()->get_logger(),
+        "Moving to configured Panda home at no more than %.3f rad/s per joint.",
+        return_max_joint_velocity_);
+    }
+  }
 
   return controller_interface::CallbackReturn::SUCCESS;
 }
@@ -435,7 +548,7 @@ controller_interface::return_type AdmittanceController::update_reference_from_su
 }
 
 controller_interface::return_type AdmittanceController::update_and_write_commands(
-  const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
+  const rclcpp::Time & time, const rclcpp::Duration & period)
 {
   // Realtime constraints are required in this function
   if (!admittance_)
@@ -449,18 +562,151 @@ controller_interface::return_type AdmittanceController::update_and_write_command
   // get all controller inputs
   read_state_from_hardware(joint_state_, ft_values_);
 
+  if (teach_mode_enabled_)
+  {
+    const auto requested = requested_teach_mode_.load(std::memory_order_acquire);
+    if (requested != active_teach_mode_)
+    {
+      if (requested == TeachMode::ADMITTANCE)
+      {
+        // Discard any prior velocity/offset state before starting a new hand-guiding segment.
+        admittance_->reset(num_joints_);
+        active_teach_mode_ = TeachMode::ADMITTANCE;
+        last_reference_ = joint_state_;
+        reference_ = joint_state_;
+        reference_admittance_ = joint_state_;
+      }
+      else if (requested == TeachMode::RETURN_HOME)
+      {
+        start_return_home_from_measured_state();
+        active_teach_mode_ = TeachMode::RETURN_HOME;
+      }
+      else
+      {
+        active_teach_mode_ = TeachMode::HOME_HOLD;
+      }
+    }
+
+    if (active_teach_mode_ == TeachMode::RETURN_HOME)
+    {
+      return_elapsed_ = std::min(return_duration_, return_elapsed_ + std::max(0.0, period.seconds()));
+      const double u = return_duration_ > 0.0 ? return_elapsed_ / return_duration_ : 1.0;
+      const double u2 = u * u;
+      const double u3 = u2 * u;
+      const double u4 = u3 * u;
+      const double u5 = u4 * u;
+      const double blend = 10.0 * u3 - 15.0 * u4 + 6.0 * u5;
+      const double blend_rate = return_duration_ > 0.0 ?
+        (30.0 * u2 - 60.0 * u3 + 30.0 * u4) / return_duration_ : 0.0;
+      for (size_t i = 0; i < num_joints_; ++i)
+      {
+        const double delta = home_joint_positions_[i] - return_start_positions_[i];
+        reference_admittance_.positions[i] = return_start_positions_[i] + blend * delta;
+        reference_admittance_.velocities[i] = blend_rate * delta;
+        if (!reference_admittance_.accelerations.empty())
+        {
+          reference_admittance_.accelerations[i] = 0.0;
+        }
+      }
+      write_state_to_hardware(reference_admittance_);
+      publish_joint_command_state(time, period);
+      if (return_elapsed_ >= return_duration_)
+      {
+        active_teach_mode_ = TeachMode::HOME_HOLD;
+        requested_teach_mode_.store(TeachMode::HOME_HOLD, std::memory_order_release);
+        set_home_hold_command();
+        write_state_to_hardware(reference_admittance_);
+      }
+      return controller_interface::return_type::OK;
+    }
+
+    if (active_teach_mode_ == TeachMode::HOME_HOLD)
+    {
+      set_home_hold_command();
+      write_state_to_hardware(reference_admittance_);
+      publish_joint_command_state(time, period);
+      return controller_interface::return_type::OK;
+    }
+  }
+
   // apply admittance control to reference to determine desired state
-  admittance_->update(joint_state_, ft_values_, reference_, period, reference_admittance_);
+  const auto result =
+    admittance_->update(joint_state_, ft_values_, reference_, period, reference_admittance_);
 
   // write calculated values to joint interfaces
   write_state_to_hardware(reference_admittance_);
+  publish_joint_command_state(time, period);
 
-  // Publish controller state
-  state_publisher_->lock();
-  state_publisher_->msg_ = admittance_->get_controller_state();
-  state_publisher_->unlockAndPublish();
+  // Status must never delay torque generation if DDS is still publishing.
+  if (state_publisher_->trylock())
+  {
+    state_publisher_->msg_ = admittance_->get_controller_state();
+    state_publisher_->unlockAndPublish();
+  }
 
-  return controller_interface::return_type::OK;
+  return result;
+}
+
+void AdmittanceController::start_return_home_from_measured_state()
+{
+  double max_delta = 0.0;
+  for (size_t i = 0; i < num_joints_; ++i)
+  {
+    return_start_positions_[i] = joint_state_.positions[i];
+    max_delta = std::max(max_delta, std::abs(home_joint_positions_[i] - return_start_positions_[i]));
+  }
+  return_elapsed_ = 0.0;
+  // The quintic blend's peak derivative is 1.875. This duration therefore
+  // limits every joint's peak speed to return_max_joint_velocity_.
+  return_duration_ = std::max(2.0, 1.875 * max_delta / return_max_joint_velocity_);
+}
+
+void AdmittanceController::set_home_hold_command()
+{
+  for (size_t i = 0; i < num_joints_; ++i)
+  {
+    reference_admittance_.positions[i] = home_joint_positions_[i];
+    if (!reference_admittance_.velocities.empty())
+    {
+      reference_admittance_.velocities[i] = 0.0;
+    }
+    if (!reference_admittance_.accelerations.empty())
+    {
+      reference_admittance_.accelerations[i] = 0.0;
+    }
+  }
+}
+
+void AdmittanceController::publish_joint_command_state(
+  const rclcpp::Time & time, const rclcpp::Duration & period)
+{
+  if (!joint_command_state_realtime_publisher_ || !std::isfinite(period.seconds()) ||
+      period.seconds() <= 0.0)
+  {
+    return;
+  }
+
+  joint_command_state_elapsed_sec_ += period.seconds();
+  if (joint_command_state_elapsed_sec_ + 1e-12 < joint_command_state_publish_period_sec_)
+  {
+    return;
+  }
+  joint_command_state_elapsed_sec_ = std::fmod(
+    joint_command_state_elapsed_sec_, joint_command_state_publish_period_sec_);
+
+  if (!joint_command_state_realtime_publisher_->trylock())
+  {
+    return;
+  }
+
+  auto & msg = joint_command_state_realtime_publisher_->msg_;
+  msg.header.stamp = time;
+  for (size_t i = 0; i < num_joints_; ++i)
+  {
+    msg.position[i] = last_commanded_.positions[i];
+    msg.velocity[i] = i < last_commanded_.velocities.size() ? last_commanded_.velocities[i] : 0.0;
+  }
+  joint_command_state_realtime_publisher_->unlockAndPublish();
 }
 
 controller_interface::CallbackReturn AdmittanceController::on_deactivate(

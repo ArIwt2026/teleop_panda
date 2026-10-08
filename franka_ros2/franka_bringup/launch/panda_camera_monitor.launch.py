@@ -1,12 +1,8 @@
-"""Monitor-only Panda state and wrist-camera launch.
-
-Starts the Franka hardware interface and state broadcasters, but no motion
-controller. The robot can therefore be hand-guided while camera calibration
-samples are collected.
-"""
+"""Panda wrist-camera launch with capped home and button-controlled admittance."""
 
 from launch import LaunchDescription
-from launch.actions import GroupAction, IncludeLaunchDescription
+from launch.actions import GroupAction, IncludeLaunchDescription, RegisterEventHandler
+from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
@@ -27,45 +23,41 @@ def generate_launch_description():
             'load_gripper': 'true',
             'use_rviz': 'false',
             'use_fake_hardware': 'false',
-            'load_admittance_controller': LaunchConfiguration('load_admittance_controller'),
+            'load_admittance_controller': 'false',
+            'load_cartesian_impedance_controller': 'false',
         }.items(),
     )
 
     from launch.actions import DeclareLaunchArgument
+    cartesian_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        name='spawner_cartesian_impedance_controller',
+        arguments=['cartesian_impedance_controller'],
+        output='screen',
+    )
     robot_group = GroupAction([
         PushRosNamespace('panda'),
         robot,
-        Node(
-            package='controller_manager',
-            executable='spawner',
-            arguments=['joint_impedance_zero_controller', '--inactive'],
-            output='screen',
-        ),
-        Node(
-            package='controller_manager',
-            executable='spawner',
-            arguments=['cartesian_impedance_controller', '--inactive'],
-            output='screen',
-        ),
-        Node(
-            package='controller_manager',
-            executable='spawner',
-            arguments=['admittance_controller', '--inactive'],
-            output='screen',
-        ),
-        Node(
-            package='controller_manager',
-            executable='spawner',
-            arguments=['joint_impedance_hold_controller'],
-            output='screen',
-        ),
+        cartesian_spawner,
     ])
+
+    admittance_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        name='spawner_admittance_controller',
+        namespace='panda',
+        arguments=['admittance_controller'],
+        output='screen',
+    )
 
     return LaunchDescription([
         DeclareLaunchArgument('robot_ip', description='Panda robot IP address'),
-        DeclareLaunchArgument(
-            'load_admittance_controller',
-            default_value='false',
-            description='Load and activate the Panda admittance controller.'),
+        RegisterEventHandler(
+            OnProcessExit(
+                target_action=cartesian_spawner,
+                on_exit=[admittance_spawner],
+            )
+        ),
         robot_group,
     ])

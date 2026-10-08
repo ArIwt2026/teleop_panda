@@ -156,6 +156,109 @@ admittance_controller:
       }
     }
 
+  # Optional measured-position admittance command calculation.
+  measured_position_command:
+    enabled: {
+      type: bool,
+      default_value: false,
+      read_only: true,
+      description: "Use measured-position commands instead of integrating admittance joint offsets. Requires seven joints."
+    }
+    update_rate: {
+      type: double,
+      default_value: 100.0,
+      description: "Admittance calculation rate in Hz, independently of the hardware loop.",
+      validation: {bounds<>: [1.0, 1000.0]}
+    }
+    sample_time: {
+      type: double,
+      default_value: 0.01,
+      description: "Position-step period in seconds.",
+      validation: {bounds<>: [0.001, 0.1]}
+    }
+    joint_position_tau: {
+      type: double,
+      default_value: 0.04,
+      description: "Joint command smoothing time constant in seconds; zero disables smoothing.",
+      validation: {bounds<>: [0.0, 1.0]}
+    }
+    wrench_tau: {
+      type: double,
+      default_value: 0.04,
+      description: "Time constant in seconds for filtering the Panda wrench before applying force deadbands.",
+      validation: {bounds<>: [0.0, 1.0]}
+    }
+    wrench_thresholds: {
+      type: double_array,
+      default_value: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      description: "Per-axis force/torque deadband applied after wrench filtering, in N and Nm.",
+      validation: {fixed_size<>: 6, element_bounds<>: [0.0, 1000.0]}
+    }
+    jacobian_damping: {
+      type: double,
+      default_value: 0.2,
+      description: "Damped-SVD inverse parameter: s / (s*s + lambda*lambda).",
+      validation: {bounds<>: [0.000001, 10.0]}
+    }
+    max_linear_velocity: {
+      type: double,
+      default_value: 2.0,
+      description: "Per-axis linear twist limit before Cartesian gains.",
+      validation: {bounds<>: [0.000001, 10.0]}
+    }
+    max_angular_velocity: {
+      type: double,
+      default_value: 2.0,
+      description: "Per-axis angular twist limit before Cartesian gains.",
+      validation: {bounds<>: [0.000001, 10.0]}
+    }
+    joint_gains: {
+      type: double_array,
+      default_value: [1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0],
+      description: "Per-joint velocity gains.",
+      validation: {fixed_size<>: 7, element_bounds<>: [0.0, 100.0]}
+    }
+    cartesian_gains: {
+      type: double_array,
+      default_value: [5.0, 5.0, 3.0, 6.0, 6.0, 6.0],
+      description: "Cartesian twist gains, applied after velocity clipping.",
+      validation: {fixed_size<>: 6, element_bounds<>: [0.0, 100.0]}
+    }
+
+  joint_command_state:
+    publish_rate: {
+      type: double,
+      default_value: 100.0,
+      read_only: true,
+      description: "Rate in Hz for publishing absolute joint position commands to ~/joint_commands.",
+      validation: {bounds<>: [1.0, 1000.0]}
+    }
+
+  teach_mode:
+    enabled: {
+      type: bool,
+      default_value: false,
+      read_only: true,
+      description: "Enable home/hold and double-press admittance teach-mode cycling."
+    }
+    home_joint_positions_rad: {
+      type: double_array,
+      default_value: [],
+      description: "Seven Panda home joint positions in radians."
+    }
+    return_max_joint_velocity_rad_s: {
+      type: double,
+      default_value: 0.30,
+      description: "Maximum absolute joint velocity used for the smooth return-home trajectory.",
+      validation: {bounds<>: [0.01, 1.0]}
+    }
+    wrench_thresholds: {
+      type: double_array,
+      default_value: [2.0, 2.0, 2.0, 0.1, 0.1, 0.1],
+      description: "Base-frame force (N) and torque (Nm) deadbands. Subtract threshold magnitude outside each deadband.",
+      validation: {fixed_size<>: 6, element_bounds<>: [0.0, 1000.0]}
+    }
+
   # general settings
   robot_description: {
     type: string,

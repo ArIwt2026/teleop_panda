@@ -20,6 +20,7 @@
 #include "admittance_controller/admittance_rule.hpp"
 
 #include <memory>
+#include <cmath>
 #include <vector>
 
 #include "rclcpp/duration.hpp"
@@ -36,6 +37,13 @@ controller_interface::return_type AdmittanceRule::configure(
   const std::shared_ptr<rclcpp_lifecycle::LifecycleNode> & node, const size_t num_joints)
 {
   num_joints_ = num_joints;
+
+  if (parameters_.measured_position_command.enabled && num_joints != 7)
+  {
+    RCLCPP_ERROR(node->get_logger(), "Measured-position command law requires seven joints.");
+    return controller_interface::return_type::ERROR;
+  }
+  measured_position_jacobian_.resize(6, static_cast<Eigen::Index>(num_joints));
 
   // initialize memory and values to zero  (non-realtime function)
   reset(num_joints);
@@ -102,6 +110,7 @@ controller_interface::return_type AdmittanceRule::reset(const size_t num_joints)
 
   // reset admittance state
   admittance_state_ = AdmittanceState(num_joints);
+  measured_position_command_law_.reset();
 
   // reset transforms and rotations
   admittance_transforms_ = AdmittanceTransforms();
@@ -118,16 +127,24 @@ controller_interface::return_type AdmittanceRule::reset(const size_t num_joints)
 
 void AdmittanceRule::apply_parameters_update()
 {
-  if (parameter_handler_->is_old(parameters_))
-  {
-    parameters_ = parameter_handler_->get_params();
-  }
+  // Parameter callbacks run outside RT; defer an update rather than waiting on
+  // their mutex. The existing parameter snapshot remains valid until then.
+  parameter_handler_->try_update_params(parameters_);
   // update param values
   end_effector_weight_[2] = -parameters_.gravity_compensation.CoG.force;
   vec_to_eigen(parameters_.gravity_compensation.CoG.pos, cog_pos_);
   vec_to_eigen(parameters_.admittance.mass, admittance_state_.mass);
   vec_to_eigen(parameters_.admittance.stiffness, admittance_state_.stiffness);
   vec_to_eigen(parameters_.admittance.selected_axes, admittance_state_.selected_axes);
+
+  measured_position_config_.update_rate = parameters_.measured_position_command.update_rate;
+  measured_position_config_.sample_time = parameters_.measured_position_command.sample_time;
+  measured_position_config_.joint_position_tau = parameters_.measured_position_command.joint_position_tau;
+  measured_position_config_.damping = parameters_.measured_position_command.jacobian_damping;
+  measured_position_config_.max_linear_velocity = parameters_.measured_position_command.max_linear_velocity;
+  measured_position_config_.max_angular_velocity = parameters_.measured_position_command.max_angular_velocity;
+  vec_to_eigen(parameters_.measured_position_command.joint_gains, measured_position_config_.joint_gains);
+  vec_to_eigen(parameters_.measured_position_command.cartesian_gains, measured_position_config_.cartesian_gains);
 
   for (size_t i = 0; i < NUM_CARTESIAN_DOF; ++i)
   {
@@ -182,18 +199,84 @@ controller_interface::return_type AdmittanceRule::update(
 
   bool success = get_all_transforms(current_joint_state, reference_joint_state);
 
+  if (parameters_.measured_position_command.enabled && (!success || !std::isfinite(dt) || dt <= 0.0))
+  {
+    desired_joint_state = current_joint_state;
+    std::fill(desired_joint_state.velocities.begin(), desired_joint_state.velocities.end(), 0.0);
+    std::fill(desired_joint_state.accelerations.begin(), desired_joint_state.accelerations.end(), 0.0);
+    measured_position_command_law_.reset();
+    return controller_interface::return_type::ERROR;
+  }
+
   // apply filter and update wrench_world_ vector
   Eigen::Matrix<double, 3, 3> rot_world_sensor =
     admittance_transforms_.world_base_.rotation() * admittance_transforms_.base_ft_.rotation();
   Eigen::Matrix<double, 3, 3> rot_world_cog =
     admittance_transforms_.world_base_.rotation() * admittance_transforms_.base_cog_.rotation();
-  process_wrench_measurements(measured_wrench, rot_world_sensor, rot_world_cog);
+  process_wrench_measurements(measured_wrench, rot_world_sensor, rot_world_cog, dt);
 
   // transform wrench_world_ into base frame
   admittance_state_.wrench_base.block<3, 1>(0, 0) =
     admittance_transforms_.world_base_.rotation().transpose() * wrench_world_.block<3, 1>(0, 0);
   admittance_state_.wrench_base.block<3, 1>(3, 0) =
     admittance_transforms_.world_base_.rotation().transpose() * wrench_world_.block<3, 1>(3, 0);
+
+  if (parameters_.measured_position_command.enabled)
+  {
+    // The KUKA estimator subtracts these deadbands in the chain root frame.
+    for (Eigen::Index i = 0; i < 6; ++i)
+    {
+      const double force = admittance_state_.wrench_base[i];
+      const double threshold = parameters_.measured_position_command.wrench_thresholds[static_cast<size_t>(i)];
+      admittance_state_.wrench_base[i] =
+        std::copysign(std::max(0.0, std::abs(force) - threshold), force);
+    }
+    if (measured_position_command_law_.needs_jacobian(dt, measured_position_config_))
+    {
+      success = kinematics_->calculate_jacobian(
+        current_joint_state.positions, parameters_.kinematics.tip, measured_position_jacobian_);
+    }
+    if (success)
+    {
+      success = measured_position_command_law_.update(
+        Eigen::Map<const MeasuredPositionCommandLaw::JointVector>(current_joint_state.positions.data()),
+        admittance_transforms_.base_tip_, MeasuredPositionCommandLaw::Jacobian(measured_position_jacobian_),
+        admittance_state_.wrench_base.cwiseProduct(admittance_state_.selected_axes),
+        admittance_state_.mass, admittance_state_.damping, admittance_state_.stiffness, dt,
+        measured_position_config_);
+    }
+    if (!success)
+    {
+      desired_joint_state = current_joint_state;
+      std::fill(desired_joint_state.velocities.begin(), desired_joint_state.velocities.end(), 0.0);
+      std::fill(desired_joint_state.accelerations.begin(), desired_joint_state.accelerations.end(), 0.0);
+      measured_position_command_law_.reset();
+      return controller_interface::return_type::ERROR;
+    }
+    for (size_t i = 0; i < num_joints_; ++i)
+    {
+      const auto idx = static_cast<Eigen::Index>(i);
+      desired_joint_state.positions[i] = measured_position_command_law_.command[idx];
+      desired_joint_state.velocities[i] = measured_position_command_law_.velocity[idx];
+      desired_joint_state.accelerations[i] = measured_position_command_law_.acceleration[idx];
+      // Preserve the Humble status convention: joint_state.position is an offset.
+      admittance_state_.joint_pos[idx] =
+        desired_joint_state.positions[i] - reference_joint_state.positions[i];
+      admittance_state_.joint_vel[idx] = measured_position_command_law_.velocity[idx];
+      admittance_state_.joint_acc[idx] = measured_position_command_law_.acceleration[idx];
+    }
+    admittance_state_.ref_trans_base_ft = measured_position_command_law_.initial_pose;
+    admittance_state_.admittance_position.setIdentity();
+    admittance_state_.admittance_position.linear() =
+      admittance_transforms_.base_tip_.rotation() * measured_position_command_law_.initial_pose.rotation().transpose();
+    admittance_state_.admittance_position.translation() =
+      admittance_transforms_.base_tip_.translation() - measured_position_command_law_.initial_pose.translation();
+    admittance_state_.admittance_velocity = measured_position_jacobian_ * measured_position_command_law_.velocity;
+    admittance_state_.admittance_acceleration = measured_position_jacobian_ * measured_position_command_law_.acceleration;
+    admittance_state_.ft_sensor_frame = parameters_.ft_sensor.frame.id;
+    admittance_state_.rot_base_control = admittance_transforms_.base_control_.rotation();
+    return controller_interface::return_type::OK;
+  }
 
   // Compute admittance control law
   vec_to_eigen(current_joint_state.positions, admittance_state_.current_joint_pos);
@@ -319,7 +402,7 @@ bool AdmittanceRule::calculate_admittance_rule(AdmittanceState & admittance_stat
 void AdmittanceRule::process_wrench_measurements(
   const geometry_msgs::msg::Wrench & measured_wrench,
   const Eigen::Matrix<double, 3, 3> & sensor_world_rot,
-  const Eigen::Matrix<double, 3, 3> & cog_world_rot)
+  const Eigen::Matrix<double, 3, 3> & cog_world_rot, double dt)
 {
   Eigen::Matrix<double, 3, 2, Eigen::ColMajor> new_wrench;
   new_wrench(0, 0) = measured_wrench.force.x;
@@ -337,10 +420,13 @@ void AdmittanceRule::process_wrench_measurements(
   new_wrench_base.block<3, 1>(0, 1) -= (cog_world_rot * cog_pos_).cross(end_effector_weight_);
 
   // apply smoothing filter
+  const double coefficient = parameters_.measured_position_command.enabled
+    ? (parameters_.measured_position_command.wrench_tau > 0.0 ? 1.0 - std::exp(-dt / parameters_.measured_position_command.wrench_tau) : 1.0)
+    : parameters_.ft_sensor.filter_coefficient;
   for (Eigen::Index i = 0; i < 6; ++i)
   {
     wrench_world_(i) = filters::exponentialSmoothing(
-      new_wrench_base(i), wrench_world_(i), parameters_.ft_sensor.filter_coefficient);
+      new_wrench_base(i), wrench_world_(i), coefficient);
   }
 }
 

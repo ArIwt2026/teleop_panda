@@ -72,26 +72,19 @@ panda/joint_impedance_zero_controller:
     k_gains: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     d_gains: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
 
-cartesian_impedance_controller:
-  ros__parameters:
-    arm_id: panda
-    k_gains: [100.0, 100.0, 100.0, 50.0, 50.0, 50.0]
-    d_gains: [20.0, 20.0, 20.0, 7.0, 7.0, 7.0]
-    nullspace_stiffness: 5.0
-    nullspace_damping: 0.5
-    test_sinusoid: false
-    sinusoid_amplitude: 0.03
-    sinusoid_frequency: 0.2
-    sinusoid_axis: "z"
-    admittance_mode: false
-
 panda/cartesian_impedance_controller:
   ros__parameters:
     arm_id: panda
-    k_gains: [100.0, 100.0, 100.0, 50.0, 50.0, 50.0]
-    d_gains: [20.0, 20.0, 20.0, 7.0, 7.0, 7.0]
-    nullspace_stiffness: 5.0
-    nullspace_damping: 0.5
+    k_gains: [100.0, 100.0, 100.0, 10.0, 10.0, 10.0]
+    d_gains: [8.0, 8.0, 8.0, 0.6, 1.0, 1.0]
+    nullspace_stiffness: 2.0  # Nm/rad; gentle preference for the posture captured on activation
+    nullspace_damping: 2.0  # Nm*s/rad; resists elbow motion while allowing hand repositioning
+    nullspace_max_torque: 2.0  # Nm per joint, enforced by scaling the projected vector
+    joint_limit_margin: 0.15  # rad; repulsion starts inside this distance from a limit
+    joint_limit_avoidance_torque: 1.0  # Nm before nullspace projection
+    # Match the Panda joint limits in franka_description/robots/panda_arm.xacro.
+    joint_lower_limits: [-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973]
+    joint_upper_limits: [2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973]
     test_sinusoid: false
     sinusoid_amplitude: 0.03
     sinusoid_frequency: 0.2
@@ -100,6 +93,12 @@ panda/cartesian_impedance_controller:
 
 panda/admittance_controller:
   ros__parameters:
+    teach_mode:
+      enabled: true
+      # Captured directly from libfranka on 2026-10-07. Return trajectories
+      # still start from a fresh measured state at activation/request time.
+      home_joint_positions_rad: [-0.031076, -0.598630, -0.025361, -2.444456, -0.012658, 1.879815, 0.789500]
+      return_max_joint_velocity_rad_s: 0.30
     joints:
       - panda_joint1
       - panda_joint2
@@ -149,11 +148,26 @@ panda/admittance_controller:
         force: 0.0
     admittance:
       selected_axes: [true, true, true, true, true, true]
-      mass: [5.0, 5.0, 5.0, 0.5, 0.5, 0.5]
+      mass: [0.009, 0.009, 0.009, 0.005, 0.005, 0.005]
       damping_ratio: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-      damping: [1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+      damping: [1.0, 1.0, 3.0, 0.0, 0.0, 0.0]
       stiffness: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-      joint_damping: 7.0
+      joint_damping: 0.0
+    # Measured-position command tuning. Panda hardware remains at 1000 Hz.
+    measured_position_command:
+      enabled: true
+      update_rate: 100.0
+      sample_time: 0.01
+      jacobian_damping: 0.2
+      max_linear_velocity: 2.5
+      max_angular_velocity: 2.5
+      joint_gains: [1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0]
+      cartesian_gains: [7.0, 7.0, 3.0, 7.0, 6.0, 6.0]
+      wrench_thresholds: [0.5, 0.5, 3.0, 0.01, 0.01, 0.01]
+      joint_position_tau: 0.04
+      wrench_tau: 0.04
+    joint_command_state:
+      publish_rate: 100.0
     enable_parameter_update_without_reactivation: true
 
 

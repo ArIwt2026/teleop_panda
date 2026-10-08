@@ -18,6 +18,8 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   rclcpp
   rclcpp_lifecycle
   realtime_tools
+  sensor_msgs
+  std_srvs
   tf2
   tf2_eigen
   tf2_geometry_msgs
@@ -93,6 +95,9 @@ if(BUILD_TESTING)
   )
 
   # test admittance rule implementation
+  ament_add_gmock(test_measured_position_command_law test/test_measured_position_command_law.cpp)
+  target_link_libraries(test_measured_position_command_law admittance_controller Eigen3::Eigen)
+
   ament_add_gmock(test_admittance_rule_impl
     test/test_admittance_rule_impl.cpp
   )

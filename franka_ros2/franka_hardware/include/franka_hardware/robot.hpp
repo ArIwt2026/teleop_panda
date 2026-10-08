@@ -19,13 +19,13 @@
 #include <string>
 #include <iostream>
 #include <memory>
-#include <mutex>
 #include <thread>
 
 #include <franka/exception.h>
 #include <franka/model.h>
 #include <franka/robot.h>
 #include <franka_hardware/model.hpp>
+#include <franka_hardware/latest_value_buffer.hpp>
 #include <rclcpp/logger.hpp>
 
 namespace franka_hardware {
@@ -103,15 +103,18 @@ class Robot {
   std::unique_ptr<franka::Model> model_;
   std::unique_ptr<Model> franka_hardware_model_;
 
-  std::mutex read_mutex_;
-  std::mutex write_mutex_;
+  struct TorqueCommand {
+    std::array<double, 7> efforts{};
+    int64_t written_at_ns{0};
+  };
+  LatestValueBuffer<franka::RobotState> state_buffer_;
+  LatestValueBuffer<TorqueCommand> command_buffer_;
+  rclcpp::Logger logger_{rclcpp::get_logger("FrankaHardwareInterface")};
   std::atomic_bool finish_{false};
   std::atomic_bool faulted_{false};
   std::atomic_bool control_running_{false};
-  bool stopped_ = true;
-  franka::RobotState current_state_;
+  std::atomic_bool stopped_{true};
   std::string error_message_;
 
-  std::array<double, 7> tau_command_{};
 };
 }  // namespace franka_hardware

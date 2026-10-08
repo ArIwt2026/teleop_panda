@@ -3,9 +3,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
-#include <fstream>
 #include <functional>
-#include <iomanip>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -23,7 +21,6 @@
 #include <franka_msgs/msg/franka_robot_state.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
-#include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/trigger.hpp>
 
 #include "examples_common.h"
@@ -33,19 +30,6 @@ namespace {
 constexpr double kCollisionThreshold = 100.0;
 constexpr auto kJointStatePeriod = std::chrono::milliseconds(4);
 
-inline uint64_t now_epoch_ns() {
-  return static_cast<uint64_t>(
-      std::chrono::duration_cast<std::chrono::nanoseconds>(
-          std::chrono::system_clock::now().time_since_epoch())
-          .count());
-}
-
-inline uint64_t now_steady_ns() {
-  return static_cast<uint64_t>(
-      std::chrono::duration_cast<std::chrono::nanoseconds>(
-          std::chrono::steady_clock::now().time_since_epoch())
-          .count());
-}
 }  // namespace
 
 class DirectCartesianImpedance final : public rclcpp::Node {
@@ -82,11 +66,6 @@ class DirectCartesianImpedance final : public rclcpp::Node {
                std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
           toggle(response);
         });
-    record_trigger_sub_ = create_subscription<std_msgs::msg::String>(
-        "/recorder/trigger", rclcpp::QoS(10),
-        [this](const std_msgs::msg::String::SharedPtr msg) {
-          handleRecordTrigger(msg);
-        });
     worker_thread_ = std::thread([this] { controlWorker(); });
   }
 
@@ -99,11 +78,6 @@ class DirectCartesianImpedance final : public rclcpp::Node {
     control_cv_.notify_all();
     if (worker_thread_.joinable()) {
       worker_thread_.join();
-    }
-    std::lock_guard<std::mutex> lock(csv_mutex_);
-    if (csv_file_.is_open()) {
-      csv_file_.flush();
-      csv_file_.close();
     }
   }
 
@@ -177,7 +151,7 @@ class DirectCartesianImpedance final : public rclcpp::Node {
         transition_in_progress_ = false;
         control_cv_.notify_all();
         RCLCPP_ERROR(get_logger(), "Direct Cartesian impedance stopped: %s. Falling back to continuous state monitoring.", exception.what());
-        // Fall back to state monitoring so telemetry recording continues uninterrupted
+        // Keep publishing ROS 2 state while the failed control session is stopped.
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         continue;
       }
@@ -282,7 +256,6 @@ class DirectCartesianImpedance final : public rclcpp::Node {
       }
     }
     has_state_.store(true, std::memory_order_release);
-    recordCsvSample(state, tau_d);
   }
 
   void publishJointState() {
@@ -373,116 +346,6 @@ class DirectCartesianImpedance final : public rclcpp::Node {
   uint64_t started_generation_{0};
   bool transition_in_progress_{false};
   bool shutdown_requested_{false};
-  void writeCsvHeader() {
-    csv_file_ << "pc_epoch_ns,pc_steady_ns,rel_time_s,franka_time_s,robot_mode,control_success_rate";
-    for (int i = 1; i <= 7; ++i) csv_file_ << ",q_" << i;
-    for (int i = 1; i <= 7; ++i) csv_file_ << ",q_d_" << i;
-    for (int i = 1; i <= 7; ++i) csv_file_ << ",dq_" << i;
-    for (int i = 1; i <= 7; ++i) csv_file_ << ",dq_d_" << i;
-    for (int i = 1; i <= 7; ++i) csv_file_ << ",ddq_d_" << i;
-    for (int i = 1; i <= 7; ++i) csv_file_ << ",tau_J_" << i;
-    for (int i = 1; i <= 7; ++i) csv_file_ << ",tau_J_d_" << i;
-    for (int i = 1; i <= 7; ++i) csv_file_ << ",dtau_J_" << i;
-    for (int i = 1; i <= 7; ++i) csv_file_ << ",tau_ext_" << i;
-    for (int i = 1; i <= 7; ++i) csv_file_ << ",theta_" << i;
-    for (int i = 1; i <= 7; ++i) csv_file_ << ",dtheta_" << i;
-    csv_file_ << ",O_F_ext_Fx,O_F_ext_Fy,O_F_ext_Fz,O_F_ext_Mx,O_F_ext_My,O_F_ext_Mz";
-    csv_file_ << ",K_F_ext_Fx,K_F_ext_Fy,K_F_ext_Fz,K_F_ext_Mx,K_F_ext_My,K_F_ext_Mz";
-    for (int i = 0; i < 16; ++i) csv_file_ << ",O_T_EE_" << i;
-    for (int i = 0; i < 16; ++i) csv_file_ << ",O_T_EE_d_" << i;
-    csv_file_ << "\n";
-  }
-
-  void handleRecordTrigger(const std_msgs::msg::String::SharedPtr msg) {
-    std::lock_guard<std::mutex> lock(csv_mutex_);
-    if (msg->data.empty() || msg->data == "STOP") {
-      if (is_csv_recording_.load()) {
-        is_csv_recording_.store(false);
-        if (csv_file_.is_open()) {
-          csv_file_.flush();
-          csv_file_.close();
-        }
-        current_csv_path_.clear();
-        RCLCPP_INFO(get_logger(), "Direct Franka CSV recording stopped. Total samples: %lu", csv_sample_count_);
-      }
-    } else {
-      std::string path = msg->data;
-      if (path.find(".csv") == std::string::npos) {
-        if (!path.empty() && path.back() != '/') path += "/";
-        path += "franka_telemetry.csv";
-      }
-      if (is_csv_recording_.load() && csv_file_.is_open() && current_csv_path_ == path) {
-        return; // Already recording to this file!
-      }
-      if (csv_file_.is_open()) {
-        csv_file_.flush();
-        csv_file_.close();
-      }
-      csv_file_.open(path, std::ios::out | std::ios::trunc);
-      if (csv_file_.is_open()) {
-        current_csv_path_ = path;
-        writeCsvHeader();
-        csv_start_ns_ = now_steady_ns();
-        csv_sample_count_ = 0;
-        is_csv_recording_.store(true);
-        RCLCPP_INFO(get_logger(), "Direct Franka CSV recording started: %s", path.c_str());
-      } else {
-        RCLCPP_ERROR(get_logger(), "Failed to open Franka CSV file: %s", path.c_str());
-      }
-    }
-  }
-
-  void recordCsvSample(const franka::RobotState &state, const std::array<double, 7> *tau_d) {
-    if (!is_csv_recording_.load()) return;
-    std::lock_guard<std::mutex> lock(csv_mutex_);
-    if (!csv_file_.is_open()) return;
-
-    const uint64_t epoch_ns = now_epoch_ns();
-    const uint64_t steady_ns = now_steady_ns();
-    const double rel_time_s = static_cast<double>(steady_ns - csv_start_ns_) * 1e-9;
-    const double franka_time_s = state.time.toSec();
-
-    csv_file_ << epoch_ns << ","
-              << steady_ns << ","
-              << std::fixed << std::setprecision(6) << rel_time_s << ","
-              << std::setprecision(5) << franka_time_s << ","
-              << static_cast<int>(state.robot_mode) << ","
-              << std::setprecision(3) << state.control_command_success_rate;
-
-    for (int i = 0; i < 7; ++i) csv_file_ << "," << std::setprecision(6) << state.q[i];
-    for (int i = 0; i < 7; ++i) csv_file_ << "," << std::setprecision(6) << state.q_d[i];
-    for (int i = 0; i < 7; ++i) csv_file_ << "," << std::setprecision(6) << state.dq[i];
-    for (int i = 0; i < 7; ++i) csv_file_ << "," << std::setprecision(6) << state.dq_d[i];
-    for (int i = 0; i < 7; ++i) csv_file_ << "," << std::setprecision(6) << state.ddq_d[i];
-    for (int i = 0; i < 7; ++i) csv_file_ << "," << std::setprecision(4) << state.tau_J[i];
-    for (int i = 0; i < 7; ++i) {
-      const double t_cmd = tau_d ? (*tau_d)[i] : state.tau_J_d[i];
-      csv_file_ << "," << std::setprecision(4) << t_cmd;
-    }
-    for (int i = 0; i < 7; ++i) csv_file_ << "," << std::setprecision(4) << state.dtau_J[i];
-    for (int i = 0; i < 7; ++i) csv_file_ << "," << std::setprecision(4) << state.tau_ext_hat_filtered[i];
-    for (int i = 0; i < 7; ++i) csv_file_ << "," << std::setprecision(6) << state.theta[i];
-    for (int i = 0; i < 7; ++i) csv_file_ << "," << std::setprecision(6) << state.dtheta[i];
-
-    for (int i = 0; i < 6; ++i) csv_file_ << "," << std::setprecision(4) << state.O_F_ext_hat_K[i];
-    for (int i = 0; i < 6; ++i) csv_file_ << "," << std::setprecision(4) << state.K_F_ext_hat_K[i];
-
-    for (int i = 0; i < 16; ++i) csv_file_ << "," << std::setprecision(6) << state.O_T_EE[i];
-    for (int i = 0; i < 16; ++i) csv_file_ << "," << std::setprecision(6) << state.O_T_EE_d[i];
-    csv_file_ << "\n";
-
-    if (++csv_sample_count_ % 1000 == 0) {
-      csv_file_.flush();
-    }
-  }
-
-  std::ofstream csv_file_;
-  std::string current_csv_path_;
-  std::mutex csv_mutex_;
-  std::atomic<bool> is_csv_recording_{false};
-  uint64_t csv_start_ns_{0};
-  uint64_t csv_sample_count_{0};
-  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr record_trigger_sub_;
   std::string last_error_;
 };
 

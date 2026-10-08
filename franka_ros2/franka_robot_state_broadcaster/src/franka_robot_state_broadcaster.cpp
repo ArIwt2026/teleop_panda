@@ -111,7 +111,8 @@ controller_interface::return_type FrankaRobotStateBroadcaster::update(
     return controller_interface::return_type::OK;
 
   } else {
-    return controller_interface::return_type::ERROR;
+    // A busy publisher only skips telemetry, it is not a controller failure.
+    return controller_interface::return_type::OK;
   }
 }
 

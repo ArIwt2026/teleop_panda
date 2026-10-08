@@ -32,7 +32,8 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /home/iwtros/Documents/ar:/home/iwtros/Documents/ar:rw
     command: >-
-      bash -lc "source /opt/ros/humble/setup.bash &&
+      bash -lc "sysctl -w net.core.rmem_max=8388608 &&
+      source /opt/ros/humble/setup.bash &&
       source /workspace/install/setup.bash &&
       exec ros2 launch franka_bringup panda_camera_monitor.launch.py
       robot_ip:=172.16.0.2"

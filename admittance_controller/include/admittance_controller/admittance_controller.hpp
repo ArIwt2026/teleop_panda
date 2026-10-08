@@ -18,6 +18,9 @@
 #define ADMITTANCE_CONTROLLER__ADMITTANCE_CONTROLLER_HPP_
 
 #include <chrono>
+#include <array>
+#include <atomic>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -36,13 +39,16 @@
 #include "pluginlib/class_loader.hpp"
 #include "rclcpp/duration.hpp"
 #include "rclcpp/time.hpp"
+#include "rclcpp/service.hpp"
 #include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 #include "rclcpp_lifecycle/state.hpp"
 #include "realtime_tools/realtime_buffer.hpp"
 #include "realtime_tools/realtime_publisher.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
 #include "semantic_components/force_torque_sensor.hpp"
 
 #include "trajectory_msgs/msg/joint_trajectory.hpp"
+#include "std_srvs/srv/trigger.hpp"
 
 namespace admittance_controller
 {
@@ -51,6 +57,7 @@ using ControllerStateMsg = control_msgs::msg::AdmittanceControllerState;
 class AdmittanceController : public controller_interface::ChainableControllerInterface
 {
 public:
+  enum class TeachMode : uint8_t { HOME_HOLD, ADMITTANCE, RETURN_HOME };
   ADMITTANCE_CONTROLLER_PUBLIC
   controller_interface::CallbackReturn on_init() override;
 
@@ -139,6 +146,7 @@ protected:
   rclcpp::Subscription<trajectory_msgs::msg::JointTrajectoryPoint>::SharedPtr
     input_joint_command_subscriber_;
   rclcpp::Publisher<control_msgs::msg::AdmittanceControllerState>::SharedPtr s_publisher_;
+  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_command_state_publisher_;
 
   // admittance parameters
   std::shared_ptr<admittance_controller::ParamListener> parameter_handler_;
@@ -150,6 +158,10 @@ protected:
   realtime_tools::RealtimeBuffer<std::shared_ptr<trajectory_msgs::msg::JointTrajectoryPoint>>
     input_joint_command_;
   std::unique_ptr<realtime_tools::RealtimePublisher<ControllerStateMsg>> state_publisher_;
+  std::unique_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>
+    joint_command_state_realtime_publisher_;
+  double joint_command_state_publish_period_sec_ = 0.01;
+  double joint_command_state_elapsed_sec_ = 0.0;
 
   trajectory_msgs::msg::JointTrajectoryPoint last_commanded_;
   trajectory_msgs::msg::JointTrajectoryPoint last_reference_;
@@ -161,6 +173,23 @@ protected:
   // applied ft_values_: values read from the force torque sensor
   trajectory_msgs::msg::JointTrajectoryPoint reference_, joint_state_, reference_admittance_;
   geometry_msgs::msg::Wrench ft_values_;
+
+  // Optional KUKA-style startup/teach/return cycle. The start pose is always
+  // sampled from the live hardware state interfaces; only the destination is
+  // configured.
+  bool teach_mode_enabled_ = false;
+  std::array<double, 7> home_joint_positions_{};
+  std::array<double, 7> return_start_positions_{};
+  double return_max_joint_velocity_ = 0.30;
+  double return_duration_ = 0.0;
+  double return_elapsed_ = 0.0;
+  TeachMode active_teach_mode_ = TeachMode::HOME_HOLD;
+  std::atomic<TeachMode> requested_teach_mode_{TeachMode::HOME_HOLD};
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr teach_mode_service_;
+
+  void start_return_home_from_measured_state();
+  void set_home_hold_command();
+  void publish_joint_command_state(const rclcpp::Time & time, const rclcpp::Duration & period);
 
   /**
    * @brief Read values from hardware interfaces and set corresponding fields of state_current and
