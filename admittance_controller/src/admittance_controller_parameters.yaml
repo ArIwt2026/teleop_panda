@@ -218,6 +218,20 @@ admittance_controller:
       description: "Per-joint velocity gains.",
       validation: {fixed_size<>: 7, element_bounds<>: [0.0, 100.0]}
     }
+    max_joint_velocity: {
+      type: double_array,
+      default_value: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+      read_only: true,
+      description: "Per-joint speed limits on the final admittance position reference, in rad/s.",
+      validation: {fixed_size<>: 7, element_bounds<>: [0.000001, 100.0]}
+    }
+    max_joint_acceleration: {
+      type: double_array,
+      default_value: [5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0],
+      read_only: true,
+      description: "Per-joint acceleration limits on the final admittance reference, in rad/s^2.",
+      validation: {fixed_size<>: 7, element_bounds<>: [0.000001, 1000.0]}
+    }
     cartesian_gains: {
       type: double_array,
       default_value: [5.0, 5.0, 3.0, 6.0, 6.0, 6.0],
@@ -248,9 +262,15 @@ admittance_controller:
     }
     return_max_joint_velocity_rad_s: {
       type: double,
-      default_value: 0.30,
+      default_value: 2.0,
       description: "Maximum absolute joint velocity used for the smooth return-home trajectory.",
-      validation: {bounds<>: [0.01, 1.0]}
+      validation: {bounds<>: [0.01, 3.0]}
+    }
+    return_max_joint_acceleration_rad_s2: {
+      type: double,
+      default_value: 2.0,
+      description: "Maximum absolute joint acceleration used for the smooth return-home trajectory.",
+      validation: {bounds<>: [0.01, 10.0]}
     }
     wrench_thresholds: {
       type: double_array,

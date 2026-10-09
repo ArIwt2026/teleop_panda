@@ -180,7 +180,8 @@ protected:
   bool teach_mode_enabled_ = false;
   std::array<double, 7> home_joint_positions_{};
   std::array<double, 7> return_start_positions_{};
-  double return_max_joint_velocity_ = 0.30;
+  double return_max_joint_velocity_ = 2.0;
+  double return_max_joint_acceleration_ = 2.0;
   double return_duration_ = 0.0;
   double return_elapsed_ = 0.0;
   TeachMode active_teach_mode_ = TeachMode::HOME_HOLD;

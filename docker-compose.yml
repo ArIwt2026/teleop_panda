@@ -28,6 +28,7 @@ services:
     volumes:
       - /dev:/dev
       - ./franka_ros2/franka_bringup/config/controllers.yaml:/workspace/install/franka_bringup/share/franka_bringup/config/controllers.yaml:ro
+      - ./install/admittance_controller:/workspace/install/admittance_controller:ro
       - ../cyclonedds.xml:/config/cyclonedds.xml:ro
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /home/iwtros/Documents/ar:/home/iwtros/Documents/ar:rw

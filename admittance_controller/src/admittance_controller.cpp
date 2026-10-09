@@ -188,6 +188,7 @@ controller_interface::CallbackReturn AdmittanceController::on_configure(
   const auto parameters = parameter_handler_->get_params();
   teach_mode_enabled_ = parameters.teach_mode.enabled;
   return_max_joint_velocity_ = parameters.teach_mode.return_max_joint_velocity_rad_s;
+  return_max_joint_acceleration_ = parameters.teach_mode.return_max_joint_acceleration_rad_s2;
   if (!std::isfinite(parameters.joint_command_state.publish_rate) ||
       parameters.joint_command_state.publish_rate <= 0.0)
   {
@@ -208,6 +209,11 @@ controller_interface::CallbackReturn AdmittanceController::on_configure(
     if (!std::isfinite(return_max_joint_velocity_) || return_max_joint_velocity_ <= 0.0)
     {
       RCLCPP_ERROR(get_node()->get_logger(), "return_max_joint_velocity_rad_s must be positive.");
+      return CallbackReturn::FAILURE;
+    }
+    if (!std::isfinite(return_max_joint_acceleration_) || return_max_joint_acceleration_ <= 0.0)
+    {
+      RCLCPP_ERROR(get_node()->get_logger(), "return_max_joint_acceleration_rad_s2 must be positive.");
       return CallbackReturn::FAILURE;
     }
     for (size_t i = 0; i < home_joint_positions_.size(); ++i)
@@ -656,9 +662,11 @@ void AdmittanceController::start_return_home_from_measured_state()
     max_delta = std::max(max_delta, std::abs(home_joint_positions_[i] - return_start_positions_[i]));
   }
   return_elapsed_ = 0.0;
-  // The quintic blend's peak derivative is 1.875. This duration therefore
-  // limits every joint's peak speed to return_max_joint_velocity_.
-  return_duration_ = std::max(2.0, 1.875 * max_delta / return_max_joint_velocity_);
+  // Quintic blend peak velocity: 1.875 * max_delta / T <= v_max => T_vel = 1.875 * max_delta / v_max.
+  // Quintic blend peak acceleration: 5.7735 * max_delta / T^2 <= a_max => T_acc = sqrt(5.7735 * max_delta / a_max).
+  const double t_vel = 1.875 * max_delta / return_max_joint_velocity_;
+  const double t_acc = std::sqrt(5.77350269 * max_delta / return_max_joint_acceleration_);
+  return_duration_ = std::max({0.5, t_vel, t_acc});
 }
 
 void AdmittanceController::set_home_hold_command()
@@ -701,10 +709,19 @@ void AdmittanceController::publish_joint_command_state(
 
   auto & msg = joint_command_state_realtime_publisher_->msg_;
   msg.header.stamp = time;
+  const bool homing = (active_teach_mode_ == TeachMode::RETURN_HOME || active_teach_mode_ == TeachMode::HOME_HOLD);
   for (size_t i = 0; i < num_joints_; ++i)
   {
-    msg.position[i] = last_commanded_.positions[i];
-    msg.velocity[i] = i < last_commanded_.velocities.size() ? last_commanded_.velocities[i] : 0.0;
+    if (homing)
+    {
+      msg.position[i] = home_joint_positions_[i];
+      msg.velocity[i] = 0.0;
+    }
+    else
+    {
+      msg.position[i] = last_commanded_.positions[i];
+      msg.velocity[i] = i < last_commanded_.velocities.size() ? last_commanded_.velocities[i] : 0.0;
+    }
   }
   joint_command_state_realtime_publisher_->unlockAndPublish();
 }

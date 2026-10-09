@@ -108,7 +108,8 @@ panda/admittance_controller:
       # Captured directly from libfranka on 2026-10-07. Return trajectories
       # still start from a fresh measured state at activation/request time.
       home_joint_positions_rad: [-0.031076, -0.598630, -0.025361, -2.444456, -0.012658, 1.879815, 0.789500]
-      return_max_joint_velocity_rad_s: 0.30
+      return_max_joint_velocity_rad_s: 2.0
+      return_max_joint_acceleration_rad_s2: 2.0
     joints:
       - panda_joint1
       - panda_joint2
@@ -160,7 +161,7 @@ panda/admittance_controller:
       selected_axes: [true, true, true, true, true, true]
       mass: [0.02, 0.02, 0.02, 0.005, 0.005, 0.005]
       damping_ratio: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-      damping: [0.7, 0.7, 0.7, 0.5, 0.5, 0.5]
+      damping: [1.7, 1.7, 1.7, 1.5, 1.5, 1.5]
       stiffness: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
       joint_damping: 0.0
     # Measured-position command tuning. Panda hardware remains at 1000 Hz.
@@ -171,11 +172,13 @@ panda/admittance_controller:
       jacobian_damping: 0.2
       max_linear_velocity: 3.0
       max_angular_velocity: 3.0
-      joint_gains: [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+      joint_gains: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
       cartesian_gains: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-      wrench_thresholds: [0.35, 0.35, 0.35, 0.02, 0.02, 0.02]
+      wrench_thresholds: [0.35, 0.35, 2.35, 0.02, 0.02, 0.02]
       joint_position_tau: 0.10
       wrench_tau: 0.08
+      max_joint_velocity: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      max_joint_acceleration: [5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
     joint_command_state:
       publish_rate: 100.0
     enable_parameter_update_without_reactivation: true

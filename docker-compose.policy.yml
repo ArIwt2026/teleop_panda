@@ -1,0 +1,17 @@
+# Use with docker-compose.yml; retain the existing image, RT limits and mounts.
+services:
+  panda_monitor:
+    stop_signal: SIGINT
+    environment:
+      ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-0}"
+      PYTHONNOUSERSITE: "1"
+    command:
+      - bash
+      - -lc
+      - >-
+        sysctl -w net.core.rmem_max=8388608 &&
+        source /opt/ros/humble/setup.bash &&
+        source /workspace/install/setup.bash &&
+        source /home/iwtros/Documents/ar/install/policy_execution/share/policy_execution/package.bash &&
+        exec ros2 launch policy_execution panda_policy_hardware.launch.py
+        robot_ip:=172.16.0.2

@@ -303,6 +303,10 @@ protected:
     params.measured_position_command.enabled = true;
     params.measured_position_command.wrench_tau = 0.0;
     params.measured_position_command.joint_position_tau = 0.0;
+    params.measured_position_command.max_joint_velocity.assign(7, 1e4);
+    params.measured_position_command.max_joint_acceleration.assign(7, 1e8);
+    params.measured_position_command.wrench_thresholds.assign(6, 0.0);
+    params.measured_position_command.wrench_thresholds[0] = 2.0;
     params.admittance.mass.assign(6, 0.01);
     params.admittance.stiffness.assign(6, 0.0);
     params.admittance.damping.assign(6, 0.0);

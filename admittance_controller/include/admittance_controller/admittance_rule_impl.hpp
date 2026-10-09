@@ -145,6 +145,8 @@ void AdmittanceRule::apply_parameters_update()
   measured_position_config_.max_angular_velocity = parameters_.measured_position_command.max_angular_velocity;
   vec_to_eigen(parameters_.measured_position_command.joint_gains, measured_position_config_.joint_gains);
   vec_to_eigen(parameters_.measured_position_command.cartesian_gains, measured_position_config_.cartesian_gains);
+  vec_to_eigen(parameters_.measured_position_command.max_joint_velocity, measured_position_config_.max_joint_velocity);
+  vec_to_eigen(parameters_.measured_position_command.max_joint_acceleration, measured_position_config_.max_joint_acceleration);
 
   for (size_t i = 0; i < NUM_CARTESIAN_DOF; ++i)
   {

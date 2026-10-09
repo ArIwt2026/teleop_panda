@@ -22,13 +22,21 @@ protected:
   Cartesian damping = Cartesian::Zero();
   Cartesian stiffness = Cartesian::Zero();
 
+  void SetUp() override
+  {
+    // Formula tests isolate the force/target calculation. Dedicated tests below
+    // exercise the operational reference limits.
+    config.max_joint_velocity.setConstant(1e4);
+    config.max_joint_acceleration.setConstant(1e8);
+  }
+
   bool step(double dt = 0.01)
   {
     return law.update(measured, pose, jacobian, force, mass, damping, stiffness, dt, config);
   }
 };
 
-TEST_F(MeasuredPositionCommandLawTest, MatchesKukaFormulaAndGainOrder)
+TEST_F(MeasuredPositionCommandLawTest, RetainsForceToTargetFormulaAndGainOrder)
 {
   config.joint_position_tau = 0.0;
   force << 1, -2, 3, -4, 5, -6;
@@ -50,17 +58,17 @@ TEST_F(MeasuredPositionCommandLawTest, BlockedRobotDoesNotAccumulatePositionOrVe
   force[0] = 1.0;
   ASSERT_TRUE(step());
   const Joint first_command = law.command;
-  const Joint first_velocity = law.velocity;
   for (int i = 0; i < 10000; ++i)
   {
     ASSERT_TRUE(step());
   }
   EXPECT_TRUE(law.command.isApprox(first_command, 1e-12));
-  EXPECT_TRUE(law.velocity.isApprox(first_velocity, 1e-12));
+  EXPECT_TRUE(law.velocity.isZero());
   force.setZero();
   ASSERT_TRUE(step());
-  EXPECT_TRUE(law.velocity.isZero());
   EXPECT_TRUE(law.command.isApprox(measured));
+  ASSERT_TRUE(step());
+  EXPECT_TRUE(law.velocity.isZero());
 }
 
 TEST_F(MeasuredPositionCommandLawTest, PositionStepFollowsMeasuredJoints)
@@ -105,18 +113,23 @@ TEST_F(MeasuredPositionCommandLawTest, DampingUsesMeasuredMotion)
   ASSERT_TRUE(step());
   EXPECT_NEAR(law.velocity[0], -0.1 * 5.0 / 1.04, 1e-12);
   ASSERT_TRUE(step());  // no further motion; no stored damping velocity
-  EXPECT_NEAR(law.velocity[0], 0.0, 1e-12);
+  EXPECT_TRUE(law.command.isApprox(measured));
+  // Telemetry describes the return of the reference, not the raw target increment.
+  EXPECT_NEAR(law.velocity[0], 0.1 * 5.0 / 1.04, 1e-12);
 }
 
-TEST_F(MeasuredPositionCommandLawTest, RetainsKukaAngularIncrementConvention)
+TEST_F(MeasuredPositionCommandLawTest, AngularDampingOpposesVelocityInBaseFrame)
 {
   config.joint_position_tau = 0.0;
   damping[5] = 1.0;
+  pose.linear() = Eigen::AngleAxisd(0.7, Eigen::Vector3d::UnitX()).toRotationMatrix();
   ASSERT_TRUE(step());
-  pose.linear() = Eigen::AngleAxisd(0.01, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+  pose.linear() = Eigen::AngleAxisd(0.01, Eigen::Vector3d::UnitZ()).toRotationMatrix() * pose.linear();
   ASSERT_TRUE(step());
-  // KUKA uses inverse-current * previous, and does not divide this angle by dt.
-  EXPECT_NEAR(law.velocity[5], 0.01 * 6.0 * 2.0 / 1.04, 1e-12);
+  // Positive base-Z rotation at 1 rad/s generates negative base-Z damping.
+  EXPECT_NEAR(law.velocity[5], -1.0 * 6.0 * 2.0 / 1.04, 1e-12);
+  EXPECT_NEAR(law.velocity[3], 0.0, 1e-12);
+  EXPECT_NEAR(law.velocity[4], 0.0, 1e-12);
 }
 
 TEST_F(MeasuredPositionCommandLawTest, SingularJacobianProducesFiniteBoundedMotion)
@@ -130,8 +143,63 @@ TEST_F(MeasuredPositionCommandLawTest, SingularJacobianProducesFiniteBoundedMoti
   EXPECT_LT(law.velocity.norm(), 1e-5);
   jacobian.setZero();
   ASSERT_TRUE(step());
-  EXPECT_TRUE(law.velocity.isZero());
   EXPECT_TRUE(law.command.isApprox(measured));
+  ASSERT_TRUE(step());
+  EXPECT_TRUE(law.velocity.isZero());
+}
+
+TEST_F(MeasuredPositionCommandLawTest, CapsFinalReferenceDuringForceReversalsAndTimingJitter)
+{
+  config.max_joint_velocity.setConstant(0.4);
+  config.max_joint_acceleration.setConstant(2.0);
+  for (int i = 0; i < 6000; ++i)
+  {
+    force.setConstant(i % 200 < 100 ? 100.0 : -100.0);
+    const double dt = i % 2 == 0 ? 0.0007 : 0.0013;
+    const Joint previous_command = i == 0 ? measured : law.command;
+    const Joint previous_velocity = law.velocity;
+    ASSERT_TRUE(step(dt));
+    EXPECT_LE(law.velocity.cwiseAbs().maxCoeff(), 0.4 + 1e-10);
+    EXPECT_LE(law.acceleration.cwiseAbs().maxCoeff(), 2.0 + 1e-10);
+    EXPECT_TRUE(((law.command - previous_command) / dt).isApprox(law.velocity, 1e-8));
+    EXPECT_TRUE(((law.velocity - previous_velocity) / dt).isApprox(law.acceleration, 1e-10));
+  }
+}
+
+TEST_F(MeasuredPositionCommandLawTest, LimitedReferenceSettlesWithoutAccumulatingOffset)
+{
+  config.max_joint_velocity.setConstant(0.2);
+  config.max_joint_acceleration.setConstant(0.5);
+  config.cartesian_gains.setOnes();
+  config.joint_gains.setOnes();
+  force[0] = 1.0;
+  for (int i = 0; i < 5000; ++i) ASSERT_TRUE(step(0.001));
+  EXPECT_NEAR(law.command[0], measured[0] + 0.01 / 1.04, 1e-8);
+  EXPECT_NEAR(law.velocity.norm(), 0.0, 1e-6);
+  force.setZero();
+  for (int i = 0; i < 5000; ++i) ASSERT_TRUE(step(0.001));
+  EXPECT_TRUE(law.command.isApprox(measured, 1e-8));
+  EXPECT_NEAR(law.velocity.norm(), 0.0, 1e-6);
+}
+
+TEST_F(MeasuredPositionCommandLawTest, AngularStiffnessOpposesBaseFrameDisplacement)
+{
+  config.joint_position_tau = 0.0;
+  stiffness[5] = 1.0;
+  pose.linear() = Eigen::AngleAxisd(0.7, Eigen::Vector3d::UnitX()).toRotationMatrix();
+  ASSERT_TRUE(step());
+  pose.linear() = Eigen::AngleAxisd(0.01, Eigen::Vector3d::UnitZ()).toRotationMatrix() * pose.linear();
+  ASSERT_TRUE(step());
+  EXPECT_NEAR(law.velocity[5], -0.01 * 6.0 * 2.0 / 1.04, 1e-12);
+}
+
+TEST_F(MeasuredPositionCommandLawTest, RejectsInvalidReferenceLimits)
+{
+  config.max_joint_velocity[0] = 0.0;
+  EXPECT_FALSE(step());
+  config.max_joint_velocity[0] = 1.0;
+  config.max_joint_acceleration[0] = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_FALSE(step());
 }
 
 TEST_F(MeasuredPositionCommandLawTest, JointCommandFilterMatchesKukaTimeConstant)
